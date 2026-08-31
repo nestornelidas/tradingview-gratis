@@ -1,0 +1,60 @@
+//@version=6
+indicator('TUNEL DOMENEC', shorttitle = 'TUNEL DOMENEC', overlay = true, max_bars_back = 3000)
+
+//  Genial Line
+
+// Parámetros
+VelasBanda = 20
+Desviacio = 3.14159265358979
+
+var SmoothPrice = close
+var SmoothRange = 0.0
+
+// Cálculo de valores suavizados
+if bar_index > 1
+    SmoothPrice := (SmoothPrice[1] * (VelasBanda - 1) + close) / VelasBanda
+    SmoothRange := (SmoothRange[1] * (VelasBanda - 1) + (high - low)) / VelasBanda
+
+Alt1 = (SmoothPrice + SmoothRange * Desviacio)
+Baix1 = (SmoothPrice - SmoothRange * Desviacio)
+Mitjana = (Alt1 + Baix1) / 2
+
+// Función para calcular DEMA
+dema(src, length) =>
+    ema1 = ta.ema(src, length)
+    ema2 = ta.ema(ema1, length)
+    2 * ema1 - ema2
+
+Alt = dema(Alt1, VelasBanda)
+Baix = dema(Baix1, VelasBanda)
+
+// Cálculo de c9
+c9 = (Mitjana + ta.sma(close, 34)) / 2
+color_genial = c9 > c9[1] ? color.blue : color.red
+genialplot = plot(c9 , color = color_genial, style = plot.style_cross, join = false, linewidth = 2, title = 'GENIAL LINE')
+
+//  End Genial Line
+
+//   Correction Zone
+src = input(close)
+
+ema8 = ta.ema(src, input(8, title = 'EMA-8'))
+
+// Wilder 8
+f_wwma(l, p) =>
+    wwma = 0.
+    wwma := (nz(wwma[1]) * (l - 1) + p) / l
+    wwma
+
+
+wilder8 = f_wwma(8, close)
+//  End Wilder 8
+
+
+fill_color = ema8 > wilder8 ? color.new(color.green, 75) : color.new(color.red, 75)
+plotema8 = plot(ema8, color = fill_color, linewidth = 2, title = 'EMA 8 ZONA CORRECCION')
+plotwilder8 = plot(wilder8, color = color.rgb(133, 56, 5), linewidth = 2, style = plot.style_circles, title = 'Wilder 8 ZONA CORRECCION')
+
+
+// Colorear fondo entre las emas
+

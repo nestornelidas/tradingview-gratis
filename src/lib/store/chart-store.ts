@@ -10,9 +10,13 @@ export type IndicatorKey =
   | "ema200"
   | "rsi"
   | "macd"
-  | "volume";
+  | "volume"
+  | "tunelDomenec"
+  | "controlTotalDoc"
+  | "multiAvisos";
 
-export type DrawingTool = "cursor" | "hline" | "measure" | "eraser";
+export type DrawingTool = "cursor" | "hline" | "measure" | "eraser" | "magnet";
+export type MagnetStrength = "weak" | "strong";
 
 export interface PriceLine {
   id: string;
@@ -28,6 +32,10 @@ export interface IndicatorConfig {
   macdFast: number;
   macdSlow: number;
   macdSignal: number;
+  tunelPeriod1: number;
+  tunelPeriod2: number;
+  controlDocPeriod: number;
+  multiAvisosPeriod: number;
 }
 
 export const DEFAULT_CONFIG: IndicatorConfig = {
@@ -38,6 +46,10 @@ export const DEFAULT_CONFIG: IndicatorConfig = {
   macdFast: 12,
   macdSlow: 26,
   macdSignal: 9,
+  tunelPeriod1: 34,
+  tunelPeriod2: 144,
+  controlDocPeriod: 20,
+  multiAvisosPeriod: 14,
 };
 
 export const INDICATOR_COLORS: Record<IndicatorKey, string> = {
@@ -47,6 +59,9 @@ export const INDICATOR_COLORS: Record<IndicatorKey, string> = {
   rsi: "#ab47bc",
   macd: "#2962ff",
   volume: "#787b86",
+  tunelDomenec: "#00e5ff",
+  controlTotalDoc: "#00e676",
+  multiAvisos: "#ffea00",
 };
 
 export const DEFAULT_WATCHLIST = [
@@ -75,6 +90,7 @@ interface ChartState {
 
   // Ephemeral UI state (not persisted)
   tool: DrawingTool;
+  magnetStrength: MagnetStrength;
   priceLines: PriceLine[];
   symbolDialogOpen: boolean;
   /** Which indicator's settings dialog is open (null = closed) */
@@ -90,6 +106,7 @@ interface ChartState {
   addToWatchlist: (s: string) => void;
   removeFromWatchlist: (s: string) => void;
   setTool: (t: DrawingTool) => void;
+  setMagnetStrength: (s: MagnetStrength) => void;
   addPriceLine: (price: number, symbol: string) => void;
   clearPriceLines: (symbol?: string) => void;
   setSymbolDialogOpen: (v: boolean) => void;
@@ -108,6 +125,9 @@ export const useChartStore = create<ChartState>()(
         rsi: true,
         macd: false,
         volume: true,
+        tunelDomenec: false,
+        controlTotalDoc: false,
+        multiAvisos: false,
       },
       hidden: {
         ema20: false,
@@ -116,10 +136,14 @@ export const useChartStore = create<ChartState>()(
         rsi: false,
         macd: false,
         volume: false,
+        tunelDomenec: false,
+        controlTotalDoc: false,
+        multiAvisos: false,
       },
       config: { ...DEFAULT_CONFIG },
       watchlist: DEFAULT_WATCHLIST,
       tool: "cursor",
+      magnetStrength: "weak" as MagnetStrength,
       priceLines: [],
       symbolDialogOpen: false,
       settingsTarget: null,
@@ -154,6 +178,7 @@ export const useChartStore = create<ChartState>()(
           watchlist: state.watchlist.filter((x) => x !== s),
         })),
       setTool: (tool) => set({ tool }),
+      setMagnetStrength: (magnetStrength) => set({ magnetStrength }),
       addPriceLine: (price, symbol) =>
         set((state) => ({
           priceLines: [

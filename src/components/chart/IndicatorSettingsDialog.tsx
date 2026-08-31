@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,9 @@ const TITLES: Record<IndicatorKey, string> = {
   rsi: "RSI",
   macd: "MACD",
   volume: "Volumen",
+  tunelDomenec: "Túnel de Domènec",
+  controlTotalDoc: "Control Total Doc",
+  multiAvisos: "Multi-Avisos",
 };
 
 export function IndicatorSettingsDialog() {
@@ -47,6 +50,7 @@ export function IndicatorSettingsDialog() {
         </DialogHeader>
         {target && (
           <SettingsForm
+            key={target}
             target={target}
             config={config}
             onSave={(patch) => {
@@ -81,19 +85,11 @@ function SettingsForm({ target, config, onSave, onReset }: FormProps) {
     macdFast: config.macdFast,
     macdSlow: config.macdSlow,
     macdSignal: config.macdSignal,
+    tunelPeriod1: config.tunelPeriod1,
+    tunelPeriod2: config.tunelPeriod2,
+    controlDocPeriod: config.controlDocPeriod,
+    multiAvisosPeriod: config.multiAvisosPeriod,
   });
-
-  useEffect(() => {
-    setDraft({
-      ema20: config.ema20,
-      ema50: config.ema50,
-      ema200: config.ema200,
-      rsi: config.rsi,
-      macdFast: config.macdFast,
-      macdSlow: config.macdSlow,
-      macdSignal: config.macdSignal,
-    });
-  }, [config, target]);
 
   function save() {
     if (target === "ema20") onSave({ ema20: clamp(draft.ema20, 2, 500) });
@@ -107,6 +103,15 @@ function SettingsForm({ target, config, onSave, onReset }: FormProps) {
         macdSignal: clamp(draft.macdSignal, 2, 100),
       });
     else if (target === "volume") onSave({});
+    else if (target === "tunelDomenec")
+      onSave({
+        tunelPeriod1: clamp(draft.tunelPeriod1, 2, 500),
+        tunelPeriod2: clamp(draft.tunelPeriod2, 2, 500),
+      });
+    else if (target === "controlTotalDoc")
+      onSave({ controlDocPeriod: clamp(draft.controlDocPeriod, 2, 500) });
+    else if (target === "multiAvisos")
+      onSave({ multiAvisosPeriod: clamp(draft.multiAvisosPeriod, 2, 500) });
   }
 
   return (
@@ -123,6 +128,34 @@ function SettingsForm({ target, config, onSave, onReset }: FormProps) {
           label="Período"
           value={draft.rsi}
           onChange={(n) => setDraft((d) => ({ ...d, rsi: n }))}
+        />
+      )}
+      {target === "tunelDomenec" && (
+        <div className="grid grid-cols-2 gap-2">
+          <Field
+            label="Banda Rápida"
+            value={draft.tunelPeriod1}
+            onChange={(n) => setDraft((d) => ({ ...d, tunelPeriod1: n }))}
+          />
+          <Field
+            label="Banda Lenta"
+            value={draft.tunelPeriod2}
+            onChange={(n) => setDraft((d) => ({ ...d, tunelPeriod2: n }))}
+          />
+        </div>
+      )}
+      {target === "controlTotalDoc" && (
+        <Field
+          label="Periodo (WPR/ADX)"
+          value={draft.controlDocPeriod}
+          onChange={(n) => setDraft((d) => ({ ...d, controlDocPeriod: n }))}
+        />
+      )}
+      {target === "multiAvisos" && (
+        <Field
+          label="Periodo (RSI)"
+          value={draft.multiAvisosPeriod}
+          onChange={(n) => setDraft((d) => ({ ...d, multiAvisosPeriod: n }))}
         />
       )}
       {target === "macd" && (

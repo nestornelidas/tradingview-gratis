@@ -3,23 +3,35 @@
 import { useEffect, useRef, useState } from "react";
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
   LineSeries,
+  AreaSeries,
   HistogramSeries,
   CrosshairMode,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
   type IPriceLine,
+  type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
 import { fetchKlines } from "@/lib/binance/rest";
 import { getBinanceWS } from "@/lib/binance/ws";
-import { ema, rsi, macd } from "@/lib/indicators";
+import {
+  ema,
+  rsi,
+  macd,
+  calculateTunelDomenec,
+  calculateControlTotal,
+  calculateMultiavisos,
+} from "@/lib/indicators";
 import type { Candle, Timeframe } from "@/lib/binance/types";
 import {
   INDICATOR_COLORS,
   useChartStore,
   type IndicatorKey,
+  type MagnetStrength,
 } from "@/lib/store/chart-store";
 import { formatPrice, formatVolume } from "@/lib/format";
 import { IndicatorPill } from "./IndicatorPill";
@@ -35,6 +47,66 @@ interface MeasureState {
   b: MeasurePoint | null;
 }
 const INITIAL_MEASURE: MeasureState = { phase: "idle", a: null, b: null };
+
+// ── Magnet / Snap-to-OHLC ─────────────────────────────────────────────────────
+interface SnapPoint {
+  x: number; // pixel coordinate
+  y: number; // pixel coordinate
+  price: number;
+  time: number;
+}
+
+/**
+ * Given the current cursor position, find the nearest OHLC point of the
+ * candle under the cursor (and its immediate neighbours).
+ * Returns null if snapping should not occur (weak mode + too far away).
+ */
+function findSnapPoint(
+  candles: Candle[],
+  chart: IChartApi,
+  candleSeries: ISeriesApi<"Candlestick">,
+  cursorX: number,
+  cursorY: number,
+  strength: MagnetStrength,
+): SnapPoint | null {
+  if (candles.length === 0) return null;
+
+  // Convert cursor pixel x to a logical index
+  const logical = chart.timeScale().coordinateToLogical(cursorX);
+  if (logical === null) return null;
+
+  const idx = Math.round(logical);
+  const candidates: Candle[] = [];
+  for (let i = idx - 1; i <= idx + 1; i++) {
+    if (i >= 0 && i < candles.length) candidates.push(candles[i]);
+  }
+  if (candidates.length === 0) return null;
+
+  let best: SnapPoint | null = null;
+  let bestDist = Infinity;
+  const WEAK_THRESHOLD_PX = 20; // px radius for weak mode
+
+  for (const candle of candidates) {
+    const cx = chart.timeScale().timeToCoordinate(candle.time as UTCTimestamp);
+    if (cx === null) continue;
+
+    for (const price of [candle.open, candle.high, candle.low, candle.close]) {
+      const cy = candleSeries.priceToCoordinate(price);
+      if (cy === null) continue;
+      const dx = cx - cursorX;
+      const dy = cy - cursorY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = { x: cx, y: cy, price, time: candle.time };
+      }
+    }
+  }
+
+  if (!best) return null;
+  if (strength === "weak" && bestDist > WEAK_THRESHOLD_PX) return null;
+  return best;
+}
 
 function durationLabel(aTime: number, bTime: number): string {
   const diff = Math.abs(bTime - aTime);
@@ -84,6 +156,10 @@ interface LastValues {
   macdSignal?: number;
   macdHist?: number;
   volume?: number;
+  tunelDomenecC9?: number;
+  controlTotalWPR?: number;
+  controlTotalADX?: number;
+  almaOsc?: number;
 }
 
 interface PaneOffset {
@@ -95,6 +171,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const ema20Ref = useRef<ISeriesApi<"Line"> | null>(null);
   const ema50Ref = useRef<ISeriesApi<"Line"> | null>(null);
@@ -108,19 +185,39 @@ export function PriceChart({ symbol, timeframe }: Props) {
   const candlesRef = useRef<Candle[]>([]);
   const priceLinesMapRef = useRef<Map<string, IPriceLine>>(new Map());
 
+  // Refs de indicadores nuevos
+  const tunelDomenecC9Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const tunelDomenecAltRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const tunelDomenecBaixRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const tunelDomenecEma8Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const tunelDomenecWilder8Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const tunelFillGreenRef = useRef<ISeriesApi<"Area"> | null>(null);
+  const tunelFillRedRef = useRef<ISeriesApi<"Area"> | null>(null);
+  const almaOscRef = useRef<ISeriesApi<"Line"> | null>(null);
+
   const indicators = useChartStore((s) => s.indicators);
   const hidden = useChartStore((s) => s.hidden);
   const config = useChartStore((s) => s.config);
   const tool = useChartStore((s) => s.tool);
+  const magnetStrength = useChartStore((s) => s.magnetStrength);
+  const setMagnetStrength = useChartStore((s) => s.setMagnetStrength);
   const priceLines = useChartStore((s) => s.priceLines);
   const addPriceLine = useChartStore((s) => s.addPriceLine);
   const removeIndicator = useChartStore((s) => s.removeIndicator);
   const toggleHidden = useChartStore((s) => s.toggleHidden);
   const setSettingsTarget = useChartStore((s) => s.setSettingsTarget);
 
+  // Determine which pane each indicator lives in (based on current layout)
+  let nextPaneIdx = 1;
+  const rsiPaneIdx = indicators.rsi ? nextPaneIdx++ : -1;
+  const macdPaneIdx = indicators.macd ? nextPaneIdx++ : -1;
+  const almaPaneIdx = indicators.multiAvisos ? nextPaneIdx++ : -1;
+
   // Refs to avoid recreating subscribeClick on every tool change
   const toolRef = useRef(tool);
   toolRef.current = tool;
+  const magnetStrengthRef = useRef(magnetStrength);
+  magnetStrengthRef.current = magnetStrength;
   const addPriceLineRef = useRef(addPriceLine);
   addPriceLineRef.current = addPriceLine;
   const symbolRef = useRef(symbol);
@@ -136,6 +233,20 @@ export function PriceChart({ symbol, timeframe }: Props) {
   const [renderTick, setRenderTick] = useState(0);
   const measureRef = useRef(measure);
   measureRef.current = measure;
+  // Magnet snap state (pixel coords + price for the dot indicator)
+  const [snapDot, setSnapDot] = useState<SnapPoint | null>(null);
+  const snapDotRef = useRef<SnapPoint | null>(null);
+
+  // Reset measure/snap when leaving their tools (render-time prev-value pattern)
+  const [prevTool, setPrevTool] = useState(tool);
+  if (prevTool !== tool) {
+    setPrevTool(tool);
+    if (prevTool === "measure") setMeasure(INITIAL_MEASURE);
+    if (prevTool === "magnet") {
+      setSnapDot(null);
+      snapDotRef.current = null;
+    }
+  }
 
   // Helper — compute pane top offsets from chart layout
   function recomputePaneOffsets() {
@@ -197,6 +308,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
       priceLineColor: TV_COLORS.textMuted,
       priceLineStyle: 2,
     });
+    markersRef.current = createSeriesMarkers(candleSeriesRef.current);
 
     ema20Ref.current = chart.addSeries(LineSeries, {
       color: INDICATOR_COLORS.ema20,
@@ -222,35 +334,39 @@ export function PriceChart({ symbol, timeframe }: Props) {
     // Click handler — add horizontal price line when hline tool is active
     chart.subscribeClick((param) => {
       if (!param.point || !candleSeriesRef.current) return;
-      const price = candleSeriesRef.current.coordinateToPrice(param.point.y);
-      if (price === null || !isFinite(price)) return;
+
+      // If magnet is active, use the snapped price instead of raw cursor price
+      const snapped = snapDotRef.current;
+      const rawPrice = candleSeriesRef.current.coordinateToPrice(param.point.y);
+      const price = snapped ? snapped.price : rawPrice;
+      if (price === null || !isFinite(price as number)) return;
 
       if (toolRef.current === "hline") {
-        addPriceLineRef.current(price, symbolRef.current);
+        addPriceLineRef.current(price as number, symbolRef.current);
         return;
       }
 
       if (toolRef.current === "measure") {
-        if (!param.time) return;
-        const time = Number(param.time);
+        const time = snapped ? snapped.time : Number(param.time);
+        if (!time) return;
         const current = measureRef.current;
         if (current.phase === "idle") {
           setMeasure({
             phase: "placing",
-            a: { time, price },
-            b: { time, price },
+            a: { time, price: price as number },
+            b: { time, price: price as number },
           });
         } else if (current.phase === "placing") {
           setMeasure({
             phase: "done",
             a: current.a,
-            b: { time, price },
+            b: { time, price: price as number },
           });
         } else {
           setMeasure({
             phase: "placing",
-            a: { time, price },
-            b: { time, price },
+            a: { time, price: price as number },
+            b: { time, price: price as number },
           });
         }
       }
@@ -258,6 +374,37 @@ export function PriceChart({ symbol, timeframe }: Props) {
 
     // Crosshair handler
     chart.subscribeCrosshairMove((param) => {
+      // ── Magnet: compute snap point whenever cursor is over the chart ──────
+      if (param.point && candleSeriesRef.current) {
+        const isMagnetTool = toolRef.current === "magnet";
+        // Also apply snap to measure tool when magnet-tool was previously active
+        // (snap is always computed so it's available for clicks)
+        const snap = findSnapPoint(
+          candlesRef.current,
+          chart,
+          candleSeriesRef.current,
+          param.point.x,
+          param.point.y,
+          isMagnetTool ? magnetStrengthRef.current : "weak",
+        );
+        const effectiveSnap = isMagnetTool ? snap : snap; // always compute
+        snapDotRef.current = isMagnetTool ? effectiveSnap : null;
+        setSnapDot(isMagnetTool ? effectiveSnap : null);
+
+        // Move crosshair to snap point when magnet is active
+        if (isMagnetTool && snap && candleSeriesRef.current) {
+          chart.setCrosshairPosition(
+            snap.price,
+            snap.time as UTCTimestamp,
+            candleSeriesRef.current,
+          );
+        }
+      } else {
+        snapDotRef.current = null;
+        setSnapDot(null);
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       if (
         toolRef.current === "measure" &&
         measureRef.current.phase === "placing" &&
@@ -265,11 +412,14 @@ export function PriceChart({ symbol, timeframe }: Props) {
         param.time &&
         candleSeriesRef.current
       ) {
-        const price = candleSeriesRef.current.coordinateToPrice(param.point.y);
-        if (price !== null && isFinite(price)) {
-          const time = Number(param.time);
+        const snapped = snapDotRef.current;
+        const price = snapped
+          ? snapped.price
+          : candleSeriesRef.current.coordinateToPrice(param.point.y);
+        if (price !== null && isFinite(price as number)) {
+          const time = snapped ? snapped.time : Number(param.time);
           setMeasure((prev) =>
-            prev.phase === "placing" ? { ...prev, b: { time, price } } : prev,
+            prev.phase === "placing" ? { ...prev, b: { time, price: price as number } } : prev,
           );
         }
       }
@@ -317,6 +467,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
+      markersRef.current = null;
       volumeSeriesRef.current = null;
       priceLinesMapRef.current.clear();
       ema20Ref.current = null;
@@ -328,6 +479,14 @@ export function PriceChart({ symbol, timeframe }: Props) {
       macdRef.current = null;
       macdSignalRef.current = null;
       macdHistRef.current = null;
+      tunelDomenecC9Ref.current = null;
+      tunelDomenecAltRef.current = null;
+      tunelDomenecBaixRef.current = null;
+      tunelDomenecEma8Ref.current = null;
+      tunelDomenecWilder8Ref.current = null;
+      tunelFillGreenRef.current = null;
+      tunelFillRedRef.current = null;
+      almaOscRef.current = null;
     };
   }, []);
 
@@ -364,8 +523,8 @@ export function PriceChart({ symbol, timeframe }: Props) {
   // RSI pane
   useEffect(() => {
     if (!chartRef.current) return;
-    if (indicators.rsi && !rsiRef.current) {
-      const paneIndex = 1;
+    if (indicators.rsi && !rsiRef.current && rsiPaneIdx !== -1) {
+      const paneIndex = rsiPaneIdx;
       const r = chartRef.current.addSeries(
         LineSeries,
         {
@@ -421,8 +580,8 @@ export function PriceChart({ symbol, timeframe }: Props) {
   // MACD pane
   useEffect(() => {
     if (!chartRef.current) return;
-    if (indicators.macd && !macdRef.current) {
-      const paneIndex = indicators.rsi ? 2 : 1;
+    if (indicators.macd && !macdRef.current && macdPaneIdx !== -1) {
+      const paneIndex = macdPaneIdx;
       const m = chartRef.current.addSeries(
         LineSeries,
         {
@@ -465,8 +624,119 @@ export function PriceChart({ symbol, timeframe }: Props) {
       macdHistRef.current = null;
     }
     requestAnimationFrame(() => recomputePaneOffsets());
+  }, [indicators.macd, indicators.rsi, macdPaneIdx]);
+
+  // Túnel de Domènec pane 0 indicators
+  useEffect(() => {
+    if (!chartRef.current) return;
+    if (indicators.tunelDomenec && !tunelDomenecC9Ref.current) {
+      const c9 = chartRef.current.addSeries(LineSeries, {
+        color: INDICATOR_COLORS.tunelDomenec,
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+
+      const alt = chartRef.current.addSeries(LineSeries, {
+        color: "#00e5ff",
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+
+      const baix = chartRef.current.addSeries(LineSeries, {
+        color: "#00e5ff",
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+
+      const ema8 = chartRef.current.addSeries(LineSeries, {
+        color: "#00e676",
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+
+      const wilder8 = chartRef.current.addSeries(LineSeries, {
+        color: "#d500f9",
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+
+      // Fill entre EMA8 y Wilder8 (Zona de Corrección) — verde/rojo según cruce
+      const fillGreen = chartRef.current.addSeries(AreaSeries, {
+        lineVisible: false,
+        topColor: "rgba(0, 230, 118, 0.20)",
+        bottomColor: "rgba(0, 230, 118, 0.05)",
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+
+      const fillRed = chartRef.current.addSeries(AreaSeries, {
+        lineVisible: false,
+        topColor: "rgba(255, 23, 68, 0.20)",
+        bottomColor: "rgba(255, 23, 68, 0.05)",
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+
+      tunelDomenecC9Ref.current = c9;
+      tunelDomenecAltRef.current = alt;
+      tunelDomenecBaixRef.current = baix;
+      tunelDomenecEma8Ref.current = ema8;
+      tunelDomenecWilder8Ref.current = wilder8;
+      tunelFillGreenRef.current = fillGreen;
+      tunelFillRedRef.current = fillRed;
+
+      updateTunelDomenec();
+    } else if (!indicators.tunelDomenec && tunelDomenecC9Ref.current && chartRef.current) {
+      chartRef.current.removeSeries(tunelDomenecC9Ref.current);
+      if (tunelDomenecAltRef.current) chartRef.current.removeSeries(tunelDomenecAltRef.current);
+      if (tunelDomenecBaixRef.current) chartRef.current.removeSeries(tunelDomenecBaixRef.current);
+      if (tunelDomenecEma8Ref.current) chartRef.current.removeSeries(tunelDomenecEma8Ref.current);
+      if (tunelDomenecWilder8Ref.current) chartRef.current.removeSeries(tunelDomenecWilder8Ref.current);
+      if (tunelFillGreenRef.current) chartRef.current.removeSeries(tunelFillGreenRef.current);
+      if (tunelFillRedRef.current) chartRef.current.removeSeries(tunelFillRedRef.current);
+
+      tunelDomenecC9Ref.current = null;
+      tunelDomenecAltRef.current = null;
+      tunelDomenecBaixRef.current = null;
+      tunelDomenecEma8Ref.current = null;
+      tunelDomenecWilder8Ref.current = null;
+      tunelFillGreenRef.current = null;
+      tunelFillRedRef.current = null;
+    }
+  }, [indicators.tunelDomenec]);
+
+  // MultiAvisos / ALMA pane
+  useEffect(() => {
+    if (!chartRef.current) return;
+    if (indicators.multiAvisos && !almaOscRef.current && almaPaneIdx !== -1) {
+      const paneIndex = almaPaneIdx;
+      const alma = chartRef.current.addSeries(LineSeries, {
+        color: INDICATOR_COLORS.multiAvisos,
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, paneIndex);
+
+      almaOscRef.current = alma;
+
+      try {
+        chartRef.current.panes()[paneIndex]?.setStretchFactor(1);
+        chartRef.current.panes()[0]?.setStretchFactor(3);
+      } catch {}
+
+      updateMultiavisos();
+    } else if (!indicators.multiAvisos && almaOscRef.current && chartRef.current) {
+      chartRef.current.removeSeries(almaOscRef.current);
+      almaOscRef.current = null;
+    }
+    requestAnimationFrame(() => recomputePaneOffsets());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [indicators.macd, indicators.rsi]);
+  }, [indicators.multiAvisos, indicators.rsi, indicators.macd, almaPaneIdx]);
 
   // Visibility — eye toggle (hidden state) + enabled state combined
   useEffect(() => {
@@ -481,6 +751,28 @@ export function PriceChart({ symbol, timeframe }: Props) {
     if (macdSignalRef.current) macdSignalRef.current.applyOptions({ visible: v("macd") });
     if (macdHistRef.current) macdHistRef.current.applyOptions({ visible: v("macd") });
     if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: v("volume") });
+
+    // Visibilidad de los nuevos indicadores
+    tunelDomenecC9Ref.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelDomenecAltRef.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelDomenecBaixRef.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelDomenecEma8Ref.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelDomenecWilder8Ref.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelFillGreenRef.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelFillRedRef.current?.applyOptions({ visible: v("tunelDomenec") });
+    if (almaOscRef.current) almaOscRef.current.applyOptions({ visible: v("multiAvisos") });
+
+    // Limpiar o actualizar marcadores
+    if (markersRef.current) {
+      if (v("multiAvisos")) {
+        updateMultiavisos();
+      } else {
+        markersRef.current.setMarkers([]);
+      }
+    }
+    // Repintar velas por Control Total
+    updateCandles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [indicators, hidden]);
 
   // Recompute indicators when config changes (periods)
@@ -495,6 +787,18 @@ export function PriceChart({ symbol, timeframe }: Props) {
   useEffect(() => {
     updateMACD();
   }, [config.macdFast, config.macdSlow, config.macdSignal]);
+
+  useEffect(() => {
+    updateTunelDomenec();
+  }, [config.tunelPeriod1, config.tunelPeriod2]);
+
+  useEffect(() => {
+    updateControlTotal();
+  }, [config.controlDocPeriod]);
+
+  useEffect(() => {
+    updateMultiavisos();
+  }, [config.multiAvisosPeriod]);
 
   // Sync price lines from store to the candle series
   useEffect(() => {
@@ -527,14 +831,27 @@ export function PriceChart({ symbol, timeframe }: Props) {
     }
   }, [priceLines, symbol]);
 
-  // Cursor style when drawing tools are active + reset measure on tool change
+  // Cursor style when drawing tools are active
   useEffect(() => {
     if (containerRef.current) {
       containerRef.current.style.cursor =
-        tool === "hline" || tool === "measure" ? "crosshair" : "";
+        tool === "hline" || tool === "measure" || tool === "magnet" ? "crosshair" : "";
     }
-    if (tool !== "measure") setMeasure(INITIAL_MEASURE);
   }, [tool]);
+
+  // Keyboard shortcut: M = toggle magnet tool
+  const setTool = useChartStore((s) => s.setTool);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "m" || e.key === "M") {
+        setTool(tool === "magnet" ? "cursor" : "magnet");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tool, setTool]);
 
   function updateEMAs() {
     const c = candlesRef.current;
@@ -624,6 +941,157 @@ export function PriceChart({ symbol, timeframe }: Props) {
     }));
   }
 
+  function updateCandles() {
+    const c = candlesRef.current;
+    if (c.length === 0 || !candleSeriesRef.current) return;
+    const cfg = configRef.current;
+
+    const colorsMap = new Map<number, string>();
+    if (indicators.controlTotalDoc && !hidden.controlTotalDoc) {
+      const data = calculateControlTotal(c, cfg.controlDocPeriod);
+      for (const d of data) {
+        colorsMap.set(d.time, d.color);
+      }
+    }
+
+    candleSeriesRef.current.setData(
+      c.map((k) => {
+        const customColor = colorsMap.get(k.time);
+        return {
+          time: k.time as UTCTimestamp,
+          open: k.open,
+          high: k.high,
+          low: k.low,
+          close: k.close,
+          ...(customColor
+            ? {
+                color: customColor,
+                borderColor: customColor,
+                wickColor: customColor,
+              }
+            : {
+                color: undefined,
+                borderColor: undefined,
+                wickColor: undefined,
+              }),
+        };
+      }),
+    );
+  }
+
+  function updateTunelDomenec() {
+    const c = candlesRef.current;
+    if (c.length === 0) return;
+    const cfg = configRef.current;
+
+    const data = calculateTunelDomenec(c, cfg.tunelPeriod1, 3.14159265, 8, 8);
+
+    if (tunelDomenecC9Ref.current) {
+      tunelDomenecC9Ref.current.setData(
+        data.map((p) => ({
+          time: p.time as UTCTimestamp,
+          value: p.c9,
+          color: p.c9Color,
+        })),
+      );
+    }
+    if (tunelDomenecAltRef.current) {
+      tunelDomenecAltRef.current.setData(
+        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.alt })),
+      );
+    }
+    if (tunelDomenecBaixRef.current) {
+      tunelDomenecBaixRef.current.setData(
+        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.baix })),
+      );
+    }
+    if (tunelDomenecEma8Ref.current) {
+      tunelDomenecEma8Ref.current.setData(
+        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.ema8 })),
+      );
+    }
+    if (tunelDomenecWilder8Ref.current) {
+      tunelDomenecWilder8Ref.current.setData(
+        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.wilder8 })),
+      );
+    }
+
+    // Fill Zona de Corrección — banda entre EMA8 y Wilder8 (verde/rojo)
+    if (tunelFillGreenRef.current) {
+      tunelFillGreenRef.current.setData(
+        data.map((p) =>
+          p.ema8 >= p.wilder8
+            ? { time: p.time as UTCTimestamp, top: p.ema8, bottom: p.wilder8 }
+            : { time: p.time as UTCTimestamp, top: NaN, bottom: NaN },
+        ),
+      );
+    }
+    if (tunelFillRedRef.current) {
+      tunelFillRedRef.current.setData(
+        data.map((p) =>
+          p.ema8 < p.wilder8
+            ? { time: p.time as UTCTimestamp, top: p.wilder8, bottom: p.ema8 }
+            : { time: p.time as UTCTimestamp, top: NaN, bottom: NaN },
+        ),
+      );
+    }
+
+    const last = data.at(-1);
+    setLastValues((prev) => ({
+      ...prev,
+      tunelDomenecC9: last?.c9,
+    }));
+  }
+
+  function updateControlTotal() {
+    const c = candlesRef.current;
+    if (c.length === 0) return;
+    const cfg = configRef.current;
+
+    updateCandles();
+
+    const data = calculateControlTotal(c, cfg.controlDocPeriod);
+    const last = data.at(-1);
+    setLastValues((prev) => ({
+      ...prev,
+      controlTotalWPR: last?.wpr,
+      controlTotalADX: last?.adx,
+    }));
+  }
+
+  function updateMultiavisos() {
+    const c = candlesRef.current;
+    if (c.length === 0) return;
+    const cfg = configRef.current;
+
+    const data = calculateMultiavisos(c, 15, 25, 4, 0.85, cfg.multiAvisosPeriod);
+
+    if (almaOscRef.current) {
+      almaOscRef.current.setData(
+        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.alma })),
+      );
+    }
+
+    if (markersRef.current) {
+      const v = (key: IndicatorKey) => indicators[key] && !hidden[key];
+      if (v("multiAvisos")) {
+        const markers = data
+          .flatMap((p) => p.markers)
+          .map((m) => ({ ...m, time: m.time as UTCTimestamp }));
+        markers.sort((a, b) => (a.time as number) - (b.time as number));
+        markersRef.current.setMarkers(markers);
+      } else {
+        markersRef.current.setMarkers([]);
+      }
+    }
+
+    const last = data.at(-1);
+    setLastValues((prev) => ({
+      ...prev,
+      almaOsc: last?.alma,
+    }));
+  }
+
   // Load historical data + subscribe live
   useEffect(() => {
     let unsub: (() => void) | null = null;
@@ -634,17 +1102,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
         const klines = await fetchKlines(symbol, timeframe, 1000);
         if (cancelled) return;
         candlesRef.current = klines;
-        if (candleSeriesRef.current) {
-          candleSeriesRef.current.setData(
-            klines.map((k) => ({
-              time: k.time as UTCTimestamp,
-              open: k.open,
-              high: k.high,
-              low: k.low,
-              close: k.close,
-            })),
-          );
-        }
+        updateCandles();
         if (volumeSeriesRef.current) {
           volumeSeriesRef.current.setData(
             klines.map((k) => ({
@@ -657,6 +1115,9 @@ export function PriceChart({ symbol, timeframe }: Props) {
         updateEMAs();
         updateRSI();
         updateMACD();
+        updateTunelDomenec();
+        updateControlTotal();
+        updateMultiavisos();
         chartRef.current?.timeScale().fitContent();
         requestAnimationFrame(() => recomputePaneOffsets());
 
@@ -685,12 +1146,30 @@ export function PriceChart({ symbol, timeframe }: Props) {
             } else {
               return;
             }
+
+            let customColor: string | undefined;
+            if (indicators.controlTotalDoc && !hidden.controlTotalDoc) {
+              const data = calculateControlTotal(arr, configRef.current.controlDocPeriod);
+              customColor = data.at(-1)?.color;
+            }
+
             candleSeriesRef.current.update({
               time: k.time as UTCTimestamp,
               open: k.open,
               high: k.high,
               low: k.low,
               close: k.close,
+              ...(customColor
+                ? {
+                    color: customColor,
+                    borderColor: customColor,
+                    wickColor: customColor,
+                  }
+                : {
+                    color: undefined,
+                    borderColor: undefined,
+                    wickColor: undefined,
+                  }),
             });
             if (volumeSeriesRef.current) {
               volumeSeriesRef.current.update({
@@ -702,6 +1181,9 @@ export function PriceChart({ symbol, timeframe }: Props) {
             updateEMAs();
             updateRSI();
             updateMACD();
+            updateTunelDomenec();
+            updateControlTotal();
+            updateMultiavisos();
             const prev = arr[arr.length - 2] ?? lastCandle;
             setLastPrice({
               value: k.close,
@@ -730,9 +1212,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
     indicators[key] && (key === "volume" || true); // always renderable if enabled
   void isShown;
 
-  // Determine which pane each indicator lives in (based on current layout)
-  const rsiPaneIdx = 1;
-  const macdPaneIdx = indicators.rsi ? 2 : 1;
+
 
   let measureRender: React.ReactNode = null;
   if (
@@ -784,6 +1264,80 @@ export function PriceChart({ symbol, timeframe }: Props) {
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
       {measureRender}
+
+      {/* ── Magnet snap dot ── */}
+      {snapDot && (
+        <div
+          className="pointer-events-none absolute z-30"
+          style={{
+            left: snapDot.x - 5,
+            top: snapDot.y - 5,
+            width: 10,
+            height: 10,
+            borderRadius: "50%",
+            background: "#ffb74d",
+            border: "2px solid #fff",
+            boxShadow: "0 0 6px 2px rgba(255,183,77,0.55)",
+          }}
+        />
+      )}
+
+      {/* ── Magnet toolbar button (bottom-left overlay) ── */}
+      <div
+        className="absolute bottom-10 left-3 z-20 flex flex-col gap-1"
+        style={{ userSelect: "none" }}
+      >
+        <div className="flex flex-col gap-1 rounded-md overflow-hidden" style={{ background: "#1e222d", border: "1px solid #2a2e39" }}>
+          {/* Magnet toggle */}
+          <button
+            id="toolbar-magnet-btn"
+            title={`Magnet — Snap to OHLC (M)\nModo: ${magnetStrength === "weak" ? "Débil" : "Fuerte"}`}
+            onClick={() => setTool(tool === "magnet" ? "cursor" : "magnet")}
+            className="flex items-center justify-center"
+            style={{
+              width: 32,
+              height: 32,
+              background: tool === "magnet" ? "rgba(255,183,77,0.18)" : "transparent",
+              border: "none",
+              cursor: "pointer",
+              color: tool === "magnet" ? "#ffb74d" : "#787b86",
+              transition: "color 0.15s, background 0.15s",
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 15A6 6 0 0 0 18 15" />
+              <line x1="6" y1="15" x2="6" y2="20" />
+              <line x1="18" y1="15" x2="18" y2="20" />
+              <line x1="2" y1="8" x2="6" y2="8" />
+              <line x1="18" y1="8" x2="22" y2="8" />
+              <path d="M6 8 A6 6 0 0 1 18 8" />
+            </svg>
+          </button>
+          {/* Weak / Strong toggle (only visible when magnet is active) */}
+          {tool === "magnet" && (
+            <button
+              id="toolbar-magnet-strength-btn"
+              title={magnetStrength === "weak" ? "Magnet Débil — click para Fuerte" : "Magnet Fuerte — click para Débil"}
+              onClick={() => setMagnetStrength(magnetStrength === "weak" ? "strong" : "weak")}
+              className="flex items-center justify-center"
+              style={{
+                width: 32,
+                height: 20,
+                background: "transparent",
+                border: "none",
+                borderTop: "1px solid #2a2e39",
+                cursor: "pointer",
+                color: "#ffb74d",
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: "0.03em",
+              }}
+            >
+              {magnetStrength === "weak" ? "W" : "S"}
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Top-left of main pane: symbol info + OHLC + Volume pill + EMA pills */}
       <div
@@ -887,6 +1441,32 @@ export function PriceChart({ symbol, timeframe }: Props) {
               onRemove={() => removeIndicator("volume")}
             />
           )}
+          {indicators.tunelDomenec && (
+            <IndicatorPill
+              name="Túnel Domènec"
+              value={lastValues.tunelDomenecC9 !== undefined ? formatPrice(lastValues.tunelDomenecC9) : undefined}
+              color={INDICATOR_COLORS.tunelDomenec}
+              hidden={hidden.tunelDomenec}
+              onToggleHide={() => toggleHidden("tunelDomenec")}
+              onSettings={() => setSettingsTarget("tunelDomenec")}
+              onRemove={() => removeIndicator("tunelDomenec")}
+            />
+          )}
+          {indicators.controlTotalDoc && (
+            <IndicatorPill
+              name="Control Total Doc"
+              value={
+                lastValues.controlTotalWPR !== undefined && lastValues.controlTotalADX !== undefined
+                  ? `W%R: ${lastValues.controlTotalWPR.toFixed(1)} / ADX: ${lastValues.controlTotalADX.toFixed(1)}`
+                  : undefined
+              }
+              color={INDICATOR_COLORS.controlTotalDoc}
+              hidden={hidden.controlTotalDoc}
+              onToggleHide={() => toggleHidden("controlTotalDoc")}
+              onSettings={() => setSettingsTarget("controlTotalDoc")}
+              onRemove={() => removeIndicator("controlTotalDoc")}
+            />
+          )}
         </div>
       </div>
 
@@ -926,6 +1506,24 @@ export function PriceChart({ symbol, timeframe }: Props) {
             onToggleHide={() => toggleHidden("macd")}
             onSettings={() => setSettingsTarget("macd")}
             onRemove={() => removeIndicator("macd")}
+          />
+        </div>
+      )}
+
+      {/* ALMA pane label */}
+      {indicators.multiAvisos && paneOffsets[almaPaneIdx] && (
+        <div
+          style={{ top: paneOffsets[almaPaneIdx].top + 6, left: 12 }}
+          className="pointer-events-none absolute z-10"
+        >
+          <IndicatorPill
+            name={`ALMA Osc`}
+            value={lastValues.almaOsc !== undefined ? lastValues.almaOsc.toFixed(2) : undefined}
+            color={INDICATOR_COLORS.multiAvisos}
+            hidden={hidden.multiAvisos}
+            onToggleHide={() => toggleHidden("multiAvisos")}
+            onSettings={() => setSettingsTarget("multiAvisos")}
+            onRemove={() => removeIndicator("multiAvisos")}
           />
         </div>
       )}

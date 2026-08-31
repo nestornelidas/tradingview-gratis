@@ -1,0 +1,32 @@
+🚀 ARQUITECTURA DEL SISTEMA
+
+Este ecosistema ofrece una visión completa del mercado, priorizando la precisión del momentum y el seguimiento de tendencia avanzado:
+
+Túneles de Domènec, Línea Genial y Zona de Corrección: Este eje central combina tres capas de análisis. Los Túneles actúan como cintas institucionales que definen niveles de equilibrio magnético y soporte estructural macro. Sobre ellos actúa la Línea Genial, un filtro maestro de tendencia suavizado que marca el sesgo direccional real, y la Zona de Corrección (ZC), una nube de alta sensibilidad diseñada para detectar retrocesos saludables. Juntos, permiten identificar el contexto de fondo y el momento exacto en el que el precio descansa para continuar su tendencia.
+
+Sistema Control Total: Algoritmo de diagnóstico que colorea las velas basándose en la convergencia del momentum (Williams %R) y la fuerza direccional (ADX). Permite identificar de un vistazo si el mercado está en fase de acumulación, tendencia fuerte o agotamiento, evitando el ruido de los mercados laterales.
+
+Algoritmo de Señales V3:
+Sistema de decisión bi-fásico para una ejecución disciplinada:
+
+Fase Radar (Triángulos): Aviso temprano de alineación entre la tendencia estructural y el momentum.
+
+Fase Gatillo (Diamantes): Confirmación definitiva de entrada por convergencia total de todos los elementos del sistema.
+
+📊 GUÍA OPERATIVA
+
+Dirección: La Línea Genial manda. Solo buscamos operaciones a favor de su pendiente y color, apoyándonos en los Túneles como guía estructural.
+
+Timing: La Zona de Corrección nos indica el punto óptimo de entrada tras un retroceso o ante una aceleración inminente.
+
+Diagnóstico: Las velas de Control Total validan la salud del movimiento. Evita operar en fases de indecisión (colores neutros).
+
+Ejecución: El Gatillo (Diamante) aparece cuando la armonía entre el precio y toda la arquitectura de cintas institucionales es absoluta.
+
+NOTAS TÉCNICAS:
+
+Multiactivo: Funciona en Criptomonedas, Acciones, Índices y Forex.
+
+Alertas: Configurables para los Gatillos de compra y venta.
+
+El indicador túnel domenec no se encuentra completo: hay que desarrollar las partes faltantes. Solicitar información 

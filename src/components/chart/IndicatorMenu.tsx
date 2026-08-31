@@ -10,19 +10,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useChartStore, type IndicatorKey } from "@/lib/store/chart-store";
+import { useChartStore, type IndicatorKey, type IndicatorConfig } from "@/lib/store/chart-store";
 
 interface Entry {
   key: IndicatorKey;
-  label: (cfg: {
-    ema20: number;
-    ema50: number;
-    ema200: number;
-    rsi: number;
-    macdFast: number;
-    macdSlow: number;
-    macdSignal: number;
-  }) => string;
+  label: (cfg: IndicatorConfig) => string;
   group: string;
 }
 
@@ -36,6 +28,21 @@ const ENTRIES: Entry[] = [
     key: "macd",
     group: "Osciladores",
     label: (c) => `MACD (${c.macdFast}, ${c.macdSlow}, ${c.macdSignal})`,
+  },
+  {
+    key: "tunelDomenec",
+    group: "Canales",
+    label: (c) => `Túnel Domènec (${c.tunelPeriod1}, ${c.tunelPeriod2})`,
+  },
+  {
+    key: "controlTotalDoc",
+    group: "Fuerza y Tendencia",
+    label: (c) => `Control Total Doc (${c.controlDocPeriod})`,
+  },
+  {
+    key: "multiAvisos",
+    group: "Alertas y Señales",
+    label: (c) => `Multi-Avisos (${c.multiAvisosPeriod})`,
   },
 ];
 

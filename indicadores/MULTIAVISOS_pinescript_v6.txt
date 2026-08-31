@@ -1,0 +1,152 @@
+//@version=6
+indicator(title="MULTIAVISOS", shorttitle="MULTIAVISOS+", overlay=true)
+
+// Inputs
+N = input.int(25, title="Periodos Divergencias", minval=1)
+r = input.int(5, title="DEMA Period r", minval=1)
+q = input.int(3, title="DEMA Period q", minval=1)
+p = input.int(8, title="Highest/Lowest Period", minval=1)
+Indicarmaxmin = input.bool(false, title="Indicar Max/Min")
+IndicarCorreccion = input.bool(false, title="Indicar Correccion")
+periode = input.int(30, title="Periodo Cond1", minval=1)
+permitjdesv = input.int(120, title="Periodo Desviacion", minval=1)
+ClaridaddeGrafico = input.int(2, title="Claridad del grafico")
+Usecajastoploss = input.bool(false, title="Usar Cajas Stop Loss")
+Sig = input.int(4, title="Sig ALMA", minval=1)
+Offs = input.float(0.85, title="Offs ALMA")
+fa = input.int(15, title="fa ALMA", minval=1)
+Sl = input.int(25, title="Sl ALMA", minval=1)
+Transparencia = input.int(70, title="Transparencia Cajas", minval=0, maxval=100)
+AjusteSLatr = input.float(1.5, title="Ajuste SL ATR")
+NumVelasEst = input.int(3, title="Num Velas Est", minval=1)
+customclose = close //Defino el cierre personalizado como el cierre normal, esto lo puedes cambiar
+
+// Calculations
+maximo = ta.highest(high, p)
+minimo = ta.lowest(low, p)
+
+// El oscilador
+oscilador = (close - minimo) / (maximo - minimo) * 100
+
+// Implementación Manual de DEMA
+dema(source, length) =>
+    ema1 = ta.ema(source, length)
+    ema2 = ta.ema(ema1, length)
+    2 * ema1 - ema2
+
+// Per trobar el %K y %D del demastic
+Oscilador1 = dema(oscilador, q)
+varoscil = dema(Oscilador1, r)
+
+//Divergencias
+if bar_index > 10 + 1 + N
+    //Divergencias Baxistas
+    if Oscilador1[1] > Oscilador1 and Oscilador1[1] > Oscilador1[2]
+        extremum2 = Oscilador1[1]
+        extremum1 = ta.highest(Oscilador1, N)
+        preciomax2 = close[1]
+        preciomax = ta.highest(close, N)
+        if extremum2 < extremum1 and preciomax2 > preciomax[1]
+            var float zz = na
+            for i = 1 to N
+                if close[i] == preciomax[1]
+                    zz := i * 1.0  // Convert to float for line.new
+                    break
+            if not na(zz)
+                line.new(bar_index[1], close[1], bar_index[int(zz)], close[int(zz)], color=color.rgb(180, 0, 0, 0), width=1)
+
+    //Divergencias Alcistas
+    if Oscilador1[1] < Oscilador1 and Oscilador1[1] < Oscilador1[2]
+        extremum22 = Oscilador1[1]
+        extremum11 = ta.lowest(Oscilador1, N)
+        preciomin2 = close[1]
+        preciomin = ta.lowest(close, N)
+        if extremum22 > extremum11 and preciomin2 < preciomin[1]
+            var float zz2 = na
+            for i2 = 1 to N
+                if close[i2] == preciomin[1]
+                    zz2 := i2 * 1.0  // Convert to float for line.new
+                    break
+            if not na(zz2)
+                line.new(bar_index[1], close[1], bar_index[int(zz2)], close[int(zz2)], color=color.rgb(0, 150, 0, 0), width=1)
+
+//Marcador de maxims o minims de un cecle de al menys 80 veles
+var int shifttext = ClaridaddeGrafico //Declarar shifttext fuera del if para que siempre esté definido
+var int cond1 = 0  // Declarar cond1 aquí
+
+if Indicarmaxmin
+    if high >= ta.highest(high, 80)
+        cond1 := 1
+    else
+        cond1 := 0
+    if cond1 == 1
+        label.new(x=bar_index, y=high + 3 * syminfo.mintick / shifttext / 0.2, text="Ma", style=label.style_label_down, color=color.rgb(0, 0, 200, 0), textcolor=color.white)
+    if low <= ta.lowest(low, 80)
+        label.new(x=bar_index, y=low - 3 * syminfo.mintick / shifttext / 0.2, text="Mi", style=label.style_label_down, color=color.rgb(250, 0, 0, 0), textcolor=color.white)
+
+ZC = ta.ema(close, 15)
+
+if IndicarCorreccion
+    if close > ZC
+        if close[1] > close[2] and close[2] > close[3] and close < close[1]
+            label.new(x=bar_index, y=high + 6 * syminfo.mintick / shifttext / 0.2, text="▼", style=label.style_label_down, color=color.rgb(250, 0, 0, 0), textcolor=color.white)
+
+    if close < ZC
+        if close[1] < close[2] and close[2] < close[3] and close > close[1]
+            label.new(x=bar_index, y=low - 6 * syminfo.mintick / shifttext / 0.2, text="▲", style=label.style_label_up, color=color.rgb(0, 0, 150, 0), textcolor=color.white)
+
+//Primera Condicio
+Cond1 = (ta.highest(close, periode) - close) / ta.highest(close, periode)
+av1 = ta.sma(Cond1, permitjdesv)
+stdv1 = ta.stdev(Cond1, permitjdesv)
+Cond1zon = av1 + stdv1
+
+//Segona condicio
+Cond2 = ta.sma(close, periode)
+av2 = ta.sma(Cond2, permitjdesv)
+stdv = ta.stdev(Cond2, permitjdesv)
+Cond2zon = av2 - stdv
+
+//Si entrem a zona de ultima baixada del cicle amb Esgotament Baixos extrem
+//dibuixar sombras negres
+if Cond1 > Cond1zon and Cond2 < Cond2zon
+    label.new(x=bar_index, y=low - 60 * syminfo.mintick / shifttext / 0.2, text="•", style=label.style_label_down, color=color.rgb(150, 0, 0, 20), textcolor=color.white)
+
+//ALMA
+//Paramatres
+Price1 = close //Defino el precio de cierre a usar, esto lo puedes cambiar
+
+//---Mitjana Movil Rapida
+m = Offs * (fa - 1)
+s = fa / Sig
+var float WtdSum = 0.0
+var float CumWt = 0.0
+for k = 0 to fa - 1
+    float Wtd = math.exp(-((k - m) * (k - m)) / (2 * s * s)) //Declare Wtd inside the loop
+    WtdSum := WtdSum + Wtd * Price1[fa - 1 - k]
+    CumWt := CumWt + Wtd
+faMA = WtdSum / CumWt
+
+//---Mitjana Movil Lenta
+n = Offs * (Sl - 1)
+t = Sl / Sig
+var float SWtdSum = 0.0
+var float SCumWt = 0.0
+for k = 0 to Sl - 1
+    float SWtd = math.exp(-((k - n) * (k - n)) / (2 * t * t)) //Declare SWtd inside the loop
+    SWtdSum := SWtdSum + SWtd * Price1[Sl - 1 - k]
+    SCumWt := SCumWt + SWtd //Corrected to use SWtd instead of Wtd
+SlMA = SWtdSum / CumWt
+
+//Alma oscilador
+ALMA = faMA - SlMA
+
+if Usecajastoploss
+    tra = Transparencia //Transparencia
+    AtrValue = ta.atr(14) //Calcula el ATR aquí
+    if ALMA > 0
+        box.new(bar_index, low - AjusteSLatr * AtrValue, bar_index[NumVelasEst], close[NumVelasEst], bgcolor=color.rgb(0, 0, 150, tra))
+    if ALMA < 0
+        box.new(bar_index, high + AjusteSLatr * AtrValue, bar_index[NumVelasEst], close[NumVelasEst], bgcolor=color.rgb(250, 0, 0, tra))
+
+plot(ALMA, title="ALMA Oscillator")
