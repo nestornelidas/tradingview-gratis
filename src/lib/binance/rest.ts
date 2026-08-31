@@ -2,24 +2,48 @@ import type { Candle, SymbolInfo, Ticker24h, Timeframe } from "./types";
 
 const BASE = "https://api.binance.com/api/v3";
 
+const MAX_PER_REQUEST = 1000;
+
 export async function fetchKlines(
   symbol: string,
   interval: Timeframe,
   limit = 1000,
 ): Promise<Candle[]> {
-  const url = `${BASE}/klines?symbol=${symbol.toUpperCase()}&interval=${interval}&limit=${limit}`;
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`klines ${res.status}`);
-  const data = (await res.json()) as unknown[][];
-  return data.map((k) => ({
-    time: Math.floor((k[0] as number) / 1000),
-    open: parseFloat(k[1] as string),
-    high: parseFloat(k[2] as string),
-    low: parseFloat(k[3] as string),
-    close: parseFloat(k[4] as string),
-    volume: parseFloat(k[5] as string),
-    isFinal: true,
-  }));
+  const candles: Candle[] = [];
+  let remaining = limit;
+  // Binance caps /klines at 1000 per call; page backwards with endTime for more.
+  while (remaining > 0) {
+    const size = Math.min(remaining, MAX_PER_REQUEST);
+    const params = new URLSearchParams({
+      symbol: symbol.toUpperCase(),
+      interval,
+      limit: String(size),
+    });
+    if (candles.length > 0) {
+      // endTimeKey = the earliest time we already have, in ms
+      const endTimeKey =
+        (candles[0].time - 1) * 1000;
+      params.set("endTime", String(endTimeKey));
+    }
+    const res = await fetch(`${BASE}/klines?${params.toString()}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`klines ${res.status}`);
+    const data = (await res.json()) as unknown[][];
+    if (data.length === 0) break;
+    const batch = data.map((k) => ({
+      time: Math.floor((k[0] as number) / 1000),
+      open: parseFloat(k[1] as string),
+      high: parseFloat(k[2] as string),
+      low: parseFloat(k[3] as string),
+      close: parseFloat(k[4] as string),
+      volume: parseFloat(k[5] as string),
+      isFinal: true,
+    }));
+    candles.unshift(...batch);
+    remaining -= batch.length;
+  }
+  return candles;
 }
 
 export async function fetchTicker24h(symbol: string): Promise<Ticker24h> {

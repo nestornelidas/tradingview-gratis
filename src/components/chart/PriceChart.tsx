@@ -1102,52 +1102,64 @@ export function PriceChart({ symbol, timeframe }: Props) {
 
     const data = calculateTunelDomenec(c, cfg.tunelPeriod1, 3.14159265, 8, 8);
 
+    // lightweight-charts rejects NaN values, so drop points with bad numbers
+    const line = (points: { time: UTCTimestamp; value?: number }[]) =>
+      points.filter((p) => !isNaN(p.value as number));
+    const fill = (points: { time: UTCTimestamp; top: number; bottom: number }[]) =>
+      points.filter((p) => !isNaN(p.top) && !isNaN(p.bottom));
+
     if (tunelDomenecC9Ref.current) {
       tunelDomenecC9Ref.current.setData(
-        data.map((p) => ({
-          time: p.time as UTCTimestamp,
-          value: p.c9,
-          color: p.c9Color,
-        })),
+        line(
+          data.map((p) => ({
+            time: p.time as UTCTimestamp,
+            value: p.c9,
+            color: p.c9Color,
+          })),
+        ),
       );
     }
     if (tunelDomenecAltRef.current) {
       tunelDomenecAltRef.current.setData(
-        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.alt })),
+        line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.alt }))),
       );
     }
     if (tunelDomenecBaixRef.current) {
       tunelDomenecBaixRef.current.setData(
-        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.baix })),
+        line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.baix }))),
       );
     }
     if (tunelDomenecEma8Ref.current) {
       tunelDomenecEma8Ref.current.setData(
-        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.ema8 })),
+        line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.ema8 }))),
       );
     }
     if (tunelDomenecWilder8Ref.current) {
       tunelDomenecWilder8Ref.current.setData(
-        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.wilder8 })),
+        line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.wilder8 }))),
       );
     }
 
     // Fill Zona de Corrección — banda entre EMA8 y Wilder8 (verde/rojo)
     if (tunelFillGreenRef.current) {
       tunelFillGreenRef.current.setData(
-        data.map((p) =>
-          p.ema8 >= p.wilder8
-            ? { time: p.time as UTCTimestamp, top: p.ema8, bottom: p.wilder8 }
-            : { time: p.time as UTCTimestamp, top: NaN, bottom: NaN },
+        fill(
+          data.map((p) =>
+            p.ema8 >= p.wilder8
+              ? { time: p.time as UTCTimestamp, top: p.ema8, bottom: p.wilder8 }
+              : { time: p.time as UTCTimestamp, top: NaN, bottom: NaN },
+          ),
         ),
       );
     }
     if (tunelFillRedRef.current) {
       tunelFillRedRef.current.setData(
-        data.map((p) =>
-          p.ema8 < p.wilder8
-            ? { time: p.time as UTCTimestamp, top: p.wilder8, bottom: p.ema8 }
-            : { time: p.time as UTCTimestamp, top: NaN, bottom: NaN },
+        fill(
+          data.map((p) =>
+            p.ema8 < p.wilder8
+              ? { time: p.time as UTCTimestamp, top: p.wilder8, bottom: p.ema8 }
+              : { time: p.time as UTCTimestamp, top: NaN, bottom: NaN },
+          ),
         ),
       );
     }
@@ -1155,61 +1167,67 @@ export function PriceChart({ symbol, timeframe }: Props) {
     // Cintas institucionales del Túnel de Domènec — 3 túneles de EMAs
     if (tunelCinta1LRef.current) {
       tunelCinta1LRef.current.setData(
-        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema123 })),
+        line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema123 }))),
       );
     }
     if (tunelCinta1HRef.current) {
       tunelCinta1HRef.current.setData(
-        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema188 })),
+        line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema188 }))),
       );
     }
     if (tunelCinta1FillRef.current) {
       tunelCinta1FillRef.current.setData(
-        data.map((p) => ({
-          time: p.time as UTCTimestamp,
-          top: Math.max(p.pema123, p.pema188),
-          bottom: Math.min(p.pema123, p.pema188),
-        })),
+        fill(
+          data.map((p) => ({
+            time: p.time as UTCTimestamp,
+            top: Math.max(p.pema123, p.pema188),
+            bottom: Math.min(p.pema123, p.pema188),
+          })),
+        ),
       );
     }
 
     if (tunelCinta2LRef.current) {
       tunelCinta2LRef.current.setData(
-        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema416 })),
+        line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema416 }))),
       );
     }
     if (tunelCinta2HRef.current) {
       tunelCinta2HRef.current.setData(
-        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema618 })),
+        line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema618 }))),
       );
     }
     if (tunelCinta2FillRef.current) {
       tunelCinta2FillRef.current.setData(
-        data.map((p) => ({
-          time: p.time as UTCTimestamp,
-          top: Math.max(p.pema416, p.pema618),
-          bottom: Math.min(p.pema416, p.pema618),
-        })),
+        fill(
+          data.map((p) => ({
+            time: p.time as UTCTimestamp,
+            top: Math.max(p.pema416, p.pema618),
+            bottom: Math.min(p.pema416, p.pema618),
+          })),
+        ),
       );
     }
 
     if (tunelCinta3LRef.current) {
       tunelCinta3LRef.current.setData(
-        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema882 })),
+        line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema882 }))),
       );
     }
     if (tunelCinta3HRef.current) {
       tunelCinta3HRef.current.setData(
-        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema1223 })),
+        line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema1223 }))),
       );
     }
     if (tunelCinta3FillRef.current) {
       tunelCinta3FillRef.current.setData(
-        data.map((p) => ({
-          time: p.time as UTCTimestamp,
-          top: Math.max(p.pema882, p.pema1223),
-          bottom: Math.min(p.pema882, p.pema1223),
-        })),
+        fill(
+          data.map((p) => ({
+            time: p.time as UTCTimestamp,
+            top: Math.max(p.pema882, p.pema1223),
+            bottom: Math.min(p.pema882, p.pema1223),
+          })),
+        ),
       );
     }
 
@@ -1276,7 +1294,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
 
     async function load() {
       try {
-        const klines = await fetchKlines(symbol, timeframe, 1000);
+        const klines = await fetchKlines(symbol, timeframe, 1300);
         if (cancelled) return;
         candlesRef.current = klines;
         updateCandles();

@@ -117,35 +117,53 @@ export function macd(
 }
 
 // Raw calculations aligned to input indices to prevent offsets
+// These are NaN-safe: leading (and intermittent) NaN values do not poison the
+// smoothing state, and `period` valid samples are required before emitting.
 export function rmaRaw(values: number[], period: number): number[] {
   const out = new Array<number>(values.length).fill(NaN);
-  if (values.length < period) return out;
+  if (values.length === 0) return out;
 
-  let sum = 0;
-  for (let i = 0; i < period; i++) {
-    sum += values[i];
-  }
-  let prev = sum / period;
-  out[period - 1] = prev;
-
-  for (let i = period; i < values.length; i++) {
-    prev = (prev * (period - 1) + values[i]) / period;
-    out[i] = prev;
+  let prev = NaN;
+  let count = 0;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (isNaN(v)) continue;
+    if (count === 0) {
+      prev = v;
+      count = 1;
+    } else if (count < period) {
+      prev = (prev * count + v) / (count + 1);
+      count++;
+    } else {
+      prev = (prev * (period - 1) + v) / period;
+    }
+    if (count === period) out[i] = prev;
   }
   return out;
 }
 
 export function emaRaw(values: number[], period: number): number[] {
   const out = new Array<number>(values.length).fill(NaN);
-  if (values.length < period) return out;
+  if (values.length === 0) return out;
   const k = 2 / (period + 1);
+
+  let prev = NaN;
+  let count = 0;
   let sum = 0;
-  for (let i = 0; i < period; i++) sum += values[i];
-  let prev = sum / period;
-  out[period - 1] = prev;
-  for (let i = period; i < values.length; i++) {
-    prev = values[i] * k + prev * (1 - k);
-    out[i] = prev;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (isNaN(v)) continue;
+    if (count < period) {
+      sum += v;
+      count++;
+      if (count === period) {
+        prev = sum / period;
+        out[i] = prev;
+      }
+    } else {
+      prev = v * k + prev * (1 - k);
+      out[i] = prev;
+    }
   }
   return out;
 }
