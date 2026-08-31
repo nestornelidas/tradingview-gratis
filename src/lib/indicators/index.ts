@@ -332,11 +332,18 @@ export interface TunelDomenecResult {
   baix: number;
   ema8: number;
   wilder8: number;
+  pema123: number;
+  pema188: number;
+  pema416: number;
+  pema618: number;
+  pema882: number;
+  pema1223: number;
 }
 
 /**
- * Túnel de Domènec — calcula las bandas institucionales (DEMA de RMA de rangos)
- * y la Genial Line (promedio de suavizados y SMA34).
+ * Túnel de Domènec — calcula las bandas institucionales (DEMA de RMA de rangos),
+ * la Genial Line (promedio de suavizados y SMA34) y las cintas institucionales
+ * (3 túneles de EMAs largas con sus rellenos).
  */
 export function calculateTunelDomenec(
   candles: Candle[],
@@ -379,6 +386,13 @@ export function calculateTunelDomenec(
   const ema8 = emaRaw(closes, ema8Period);
   const wilder8 = rmaRaw(closes, wilder8Period);
 
+  const pema123 = emaRaw(closes, 123);
+  const pema188 = emaRaw(closes, 188);
+  const pema416 = emaRaw(closes, 416);
+  const pema618 = emaRaw(closes, 618);
+  const pema882 = emaRaw(closes, 882);
+  const pema1223 = emaRaw(closes, 1223);
+
   for (let i = 0; i < candles.length; i++) {
     const m = mitjana[i];
     const s34 = sma34[i];
@@ -415,6 +429,12 @@ export function calculateTunelDomenec(
       baix: b,
       ema8: e8,
       wilder8: w8,
+      pema123: pema123[i],
+      pema188: pema188[i],
+      pema416: pema416[i],
+      pema618: pema618[i],
+      pema882: pema882[i],
+      pema1223: pema1223[i],
     });
   }
 

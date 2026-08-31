@@ -193,6 +193,16 @@ export function PriceChart({ symbol, timeframe }: Props) {
   const tunelDomenecWilder8Ref = useRef<ISeriesApi<"Line"> | null>(null);
   const tunelFillGreenRef = useRef<ISeriesApi<"Area"> | null>(null);
   const tunelFillRedRef = useRef<ISeriesApi<"Area"> | null>(null);
+  // Cintas del Túnel de Domènec (3 túneles × 2 EMAs cada uno + relleno)
+  const tunelCinta1LRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const tunelCinta1HRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const tunelCinta1FillRef = useRef<ISeriesApi<"Area"> | null>(null);
+  const tunelCinta2LRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const tunelCinta2HRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const tunelCinta2FillRef = useRef<ISeriesApi<"Area"> | null>(null);
+  const tunelCinta3LRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const tunelCinta3HRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const tunelCinta3FillRef = useRef<ISeriesApi<"Area"> | null>(null);
   const almaOscRef = useRef<ISeriesApi<"Line"> | null>(null);
 
   const indicators = useChartStore((s) => s.indicators);
@@ -486,6 +496,15 @@ export function PriceChart({ symbol, timeframe }: Props) {
       tunelDomenecWilder8Ref.current = null;
       tunelFillGreenRef.current = null;
       tunelFillRedRef.current = null;
+      tunelCinta1LRef.current = null;
+      tunelCinta1HRef.current = null;
+      tunelCinta1FillRef.current = null;
+      tunelCinta2LRef.current = null;
+      tunelCinta2HRef.current = null;
+      tunelCinta2FillRef.current = null;
+      tunelCinta3LRef.current = null;
+      tunelCinta3HRef.current = null;
+      tunelCinta3FillRef.current = null;
       almaOscRef.current = null;
     };
   }, []);
@@ -682,6 +701,67 @@ export function PriceChart({ symbol, timeframe }: Props) {
         lastValueVisible: false,
       }, 0);
 
+      // Cintas institucionales del Túnel de Domènec (3 túneles)
+      const cinta1L = chartRef.current.addSeries(LineSeries, {
+        color: "#2962ff",
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+      const cinta1H = chartRef.current.addSeries(LineSeries, {
+        color: "#2962ff",
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+      const cinta1Fill = chartRef.current.addSeries(AreaSeries, {
+        lineVisible: false,
+        topColor: "rgba(41, 98, 255, 0.25)",
+        bottomColor: "rgba(41, 98, 255, 0.25)",
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+
+      const cinta2L = chartRef.current.addSeries(LineSeries, {
+        color: "#faca51",
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+      const cinta2H = chartRef.current.addSeries(LineSeries, {
+        color: "#faca51",
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+      const cinta2Fill = chartRef.current.addSeries(AreaSeries, {
+        lineVisible: false,
+        topColor: "rgba(250, 202, 81, 0.25)",
+        bottomColor: "rgba(250, 202, 81, 0.25)",
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+
+      const cinta3L = chartRef.current.addSeries(LineSeries, {
+        color: "#ff1493",
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+      const cinta3H = chartRef.current.addSeries(LineSeries, {
+        color: "#ff1493",
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+      const cinta3Fill = chartRef.current.addSeries(AreaSeries, {
+        lineVisible: false,
+        topColor: "rgba(255, 20, 147, 0.25)",
+        bottomColor: "rgba(255, 20, 147, 0.25)",
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 0);
+
       tunelDomenecC9Ref.current = c9;
       tunelDomenecAltRef.current = alt;
       tunelDomenecBaixRef.current = baix;
@@ -689,6 +769,15 @@ export function PriceChart({ symbol, timeframe }: Props) {
       tunelDomenecWilder8Ref.current = wilder8;
       tunelFillGreenRef.current = fillGreen;
       tunelFillRedRef.current = fillRed;
+      tunelCinta1LRef.current = cinta1L;
+      tunelCinta1HRef.current = cinta1H;
+      tunelCinta1FillRef.current = cinta1Fill;
+      tunelCinta2LRef.current = cinta2L;
+      tunelCinta2HRef.current = cinta2H;
+      tunelCinta2FillRef.current = cinta2Fill;
+      tunelCinta3LRef.current = cinta3L;
+      tunelCinta3HRef.current = cinta3H;
+      tunelCinta3FillRef.current = cinta3Fill;
 
       updateTunelDomenec();
     } else if (!indicators.tunelDomenec && tunelDomenecC9Ref.current && chartRef.current) {
@@ -699,6 +788,15 @@ export function PriceChart({ symbol, timeframe }: Props) {
       if (tunelDomenecWilder8Ref.current) chartRef.current.removeSeries(tunelDomenecWilder8Ref.current);
       if (tunelFillGreenRef.current) chartRef.current.removeSeries(tunelFillGreenRef.current);
       if (tunelFillRedRef.current) chartRef.current.removeSeries(tunelFillRedRef.current);
+      if (tunelCinta1LRef.current) chartRef.current.removeSeries(tunelCinta1LRef.current);
+      if (tunelCinta1HRef.current) chartRef.current.removeSeries(tunelCinta1HRef.current);
+      if (tunelCinta1FillRef.current) chartRef.current.removeSeries(tunelCinta1FillRef.current);
+      if (tunelCinta2LRef.current) chartRef.current.removeSeries(tunelCinta2LRef.current);
+      if (tunelCinta2HRef.current) chartRef.current.removeSeries(tunelCinta2HRef.current);
+      if (tunelCinta2FillRef.current) chartRef.current.removeSeries(tunelCinta2FillRef.current);
+      if (tunelCinta3LRef.current) chartRef.current.removeSeries(tunelCinta3LRef.current);
+      if (tunelCinta3HRef.current) chartRef.current.removeSeries(tunelCinta3HRef.current);
+      if (tunelCinta3FillRef.current) chartRef.current.removeSeries(tunelCinta3FillRef.current);
 
       tunelDomenecC9Ref.current = null;
       tunelDomenecAltRef.current = null;
@@ -707,6 +805,15 @@ export function PriceChart({ symbol, timeframe }: Props) {
       tunelDomenecWilder8Ref.current = null;
       tunelFillGreenRef.current = null;
       tunelFillRedRef.current = null;
+      tunelCinta1LRef.current = null;
+      tunelCinta1HRef.current = null;
+      tunelCinta1FillRef.current = null;
+      tunelCinta2LRef.current = null;
+      tunelCinta2HRef.current = null;
+      tunelCinta2FillRef.current = null;
+      tunelCinta3LRef.current = null;
+      tunelCinta3HRef.current = null;
+      tunelCinta3FillRef.current = null;
     }
   }, [indicators.tunelDomenec]);
 
@@ -760,6 +867,15 @@ export function PriceChart({ symbol, timeframe }: Props) {
     tunelDomenecWilder8Ref.current?.applyOptions({ visible: v("tunelDomenec") });
     tunelFillGreenRef.current?.applyOptions({ visible: v("tunelDomenec") });
     tunelFillRedRef.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelCinta1LRef.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelCinta1HRef.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelCinta1FillRef.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelCinta2LRef.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelCinta2HRef.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelCinta2FillRef.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelCinta3LRef.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelCinta3HRef.current?.applyOptions({ visible: v("tunelDomenec") });
+    tunelCinta3FillRef.current?.applyOptions({ visible: v("tunelDomenec") });
     if (almaOscRef.current) almaOscRef.current.applyOptions({ visible: v("multiAvisos") });
 
     // Limpiar o actualizar marcadores
@@ -1033,6 +1149,67 @@ export function PriceChart({ symbol, timeframe }: Props) {
             ? { time: p.time as UTCTimestamp, top: p.wilder8, bottom: p.ema8 }
             : { time: p.time as UTCTimestamp, top: NaN, bottom: NaN },
         ),
+      );
+    }
+
+    // Cintas institucionales del Túnel de Domènec — 3 túneles de EMAs
+    if (tunelCinta1LRef.current) {
+      tunelCinta1LRef.current.setData(
+        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema123 })),
+      );
+    }
+    if (tunelCinta1HRef.current) {
+      tunelCinta1HRef.current.setData(
+        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema188 })),
+      );
+    }
+    if (tunelCinta1FillRef.current) {
+      tunelCinta1FillRef.current.setData(
+        data.map((p) => ({
+          time: p.time as UTCTimestamp,
+          top: Math.max(p.pema123, p.pema188),
+          bottom: Math.min(p.pema123, p.pema188),
+        })),
+      );
+    }
+
+    if (tunelCinta2LRef.current) {
+      tunelCinta2LRef.current.setData(
+        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema416 })),
+      );
+    }
+    if (tunelCinta2HRef.current) {
+      tunelCinta2HRef.current.setData(
+        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema618 })),
+      );
+    }
+    if (tunelCinta2FillRef.current) {
+      tunelCinta2FillRef.current.setData(
+        data.map((p) => ({
+          time: p.time as UTCTimestamp,
+          top: Math.max(p.pema416, p.pema618),
+          bottom: Math.min(p.pema416, p.pema618),
+        })),
+      );
+    }
+
+    if (tunelCinta3LRef.current) {
+      tunelCinta3LRef.current.setData(
+        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema882 })),
+      );
+    }
+    if (tunelCinta3HRef.current) {
+      tunelCinta3HRef.current.setData(
+        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema1223 })),
+      );
+    }
+    if (tunelCinta3FillRef.current) {
+      tunelCinta3FillRef.current.setData(
+        data.map((p) => ({
+          time: p.time as UTCTimestamp,
+          top: Math.max(p.pema882, p.pema1223),
+          bottom: Math.min(p.pema882, p.pema1223),
+        })),
       );
     }
 

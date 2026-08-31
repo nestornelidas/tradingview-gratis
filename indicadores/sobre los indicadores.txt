@@ -29,4 +29,4 @@ Multiactivo: Funciona en Criptomonedas, Acciones, Índices y Forex.
 
 Alertas: Configurables para los Gatillos de compra y venta.
 
-El indicador túnel domenec no se encuentra completo: hay que desarrollar las partes faltantes. Solicitar información 
+El indicador túnel domenec se encuentra completo: se agregaron las cintas institucionales (3 túneles de EMAs 123/188, 416/618, 882/1223 con rellenos) y el fill de la Zona de Corrección (EMA8/Wilder8), portados del Pine Script original a la app.

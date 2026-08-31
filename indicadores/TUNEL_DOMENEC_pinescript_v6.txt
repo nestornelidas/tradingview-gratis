@@ -57,4 +57,40 @@ plotwilder8 = plot(wilder8, color = color.rgb(133, 56, 5), linewidth = 2, style 
 
 
 // Colorear fondo entre las emas
+fill(plotema8, plotwilder8, color=fill_color, title='TUNEL DE CORRECCION', editable = true)
+
+///////FIN ZONA DE CORRECCION
+
+/////TUNEL DOMENEC
+
+ema123 = input(123, title='EMA-123')
+ema188 = input(188, title='EMA-188')
+
+ema416 = input(416, title='EMA-416')
+ema618 = input(618, title='EMA-618')
+
+ema882 = input(882, title='EMA-882')
+ema1223 = input(1223, title='EMA-1223')
+
+pema123 = ta.ema(src, ema123)
+pema188 = ta.ema(src, ema188)
+pema416 = ta.ema(src, ema416)
+pema618 = ta.ema(src, ema618)
+pema882 = ta.ema(src, ema882)
+pema1223 = ta.ema(src, ema1223)
+
+cinta1 = plot(pema123, title='EMA-123 TUNEL 1', color=color.blue, linewidth=1, editable = true)
+cinta1_1 = plot(pema188, title='EMA 188 TUNEL 1', color=color.blue, linewidth=1, editable = true)
+
+cinta2 = plot(pema416, title='EMA-416 TUNEL 2', color=color.yellow, linewidth=1, editable = true)
+cinta2_1 = plot(pema618, title='EMA 618 TUNEL 2', color=color.yellow, linewidth=1, editable = true)
+
+cinta3 = plot(pema882, title='EMA-882 TUNEL 3', color=#FF1493, linewidth=1, editable = true)
+cinta3_1 = plot(pema1223, title='EMA 1223 TUNEL 3', color=#FF1493, linewidth=1, editable = true)
+
+fill(cinta1, cinta1_1, color=color.new(color.blue, transp=75), title='COLOR TUNEL 1', editable=true)
+fill(cinta2, cinta2_1, color=color.new(color.yellow, transp=75), title='COLOR TUNEL 2', editable=true)
+fill(cinta3, cinta3_1, color=color.new(#FF1493, transp=75), title='COLOR TUNEL 3', editable=true)
+
+//////FIN TUNEL DOMENEC
 
