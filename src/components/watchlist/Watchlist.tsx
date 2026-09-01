@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
-import { fetchTickers24h } from "@/lib/binance/rest";
+import { fetchTickers24h, getMarket } from "@/lib/market";
 import { getBinanceWS } from "@/lib/binance/ws";
 import { useChartStore } from "@/lib/store/chart-store";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -44,7 +44,10 @@ export function Watchlist() {
       .catch(console.error);
 
     const ws = getBinanceWS();
-    const unsub = ws.subscribeMiniTickers(watchlist, (tick) => {
+    const cryptoOnly = watchlist.filter((s) => getMarket(s) === "crypto");
+    const unsub =
+      cryptoOnly.length > 0
+        ? ws.subscribeMiniTickers(cryptoOnly, (tick) => {
       setRows((prev) => {
         const prevRow = prev[tick.symbol];
         if (prevRow) {
@@ -73,7 +76,8 @@ export function Watchlist() {
           },
         };
       });
-    });
+    })
+    : () => {};
 
     return () => {
       cancelled = true;
@@ -119,9 +123,11 @@ export function Watchlist() {
               >
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-tv-text">
-                    {s.replace("USDT", "")}
+                    {s.replace(/(USDT|USDC|FDUSD|BUSD|TUSD|EUR|BTC|ETH)$/, "")}
                   </span>
-                  <span className="text-[10px] text-tv-text-dim">USDT</span>
+                  <span className="text-[10px] text-tv-text-dim">
+                    {getMarket(s) === "crypto" ? "USDT" : "STK"}
+                  </span>
                 </div>
                 <span
                   className={cn(

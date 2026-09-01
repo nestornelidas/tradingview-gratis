@@ -48,7 +48,7 @@ export const DEFAULT_CONFIG: IndicatorConfig = {
   macdSignal: 9,
   tunelPeriod1: 34,
   tunelPeriod2: 144,
-  controlDocPeriod: 20,
+  controlDocPeriod: 40,
   multiAvisosPeriod: 14,
 };
 
@@ -75,6 +75,10 @@ export const DEFAULT_WATCHLIST = [
   "AVAXUSDT",
   "LINKUSDT",
   "MATICUSDT",
+  "AAPL",
+  "TSLA",
+  "NVDA",
+  "SPY",
 ];
 
 interface ChartState {

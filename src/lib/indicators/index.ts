@@ -452,49 +452,80 @@ export interface ControlTotalResult {
 }
 
 /**
- * Sistema Control Total — diagnostica y colorea las velas
- * basándose en la convergencia del momentum (Williams %R) y fuerza (ADX).
+ * Sistema Control Total — colorea las velas según el confluencia de la fuerza
+ * (ADX, periodo 7) y el momentum/zonas del precio (Williams %R).
+ * Reproduce el código de colores original de Domènec (13 estados):
+ * fuerza/continuación/giro/corrección/neutral con verdes, rojos, ambar,
+ * cianes, azules, fucsia/magenta y marrones.
  */
 export function calculateControlTotal(
   candles: Candle[],
-  period = 14,
+  period = 40,
 ): ControlTotalResult[] {
   const out: ControlTotalResult[] = [];
   if (candles.length === 0) return out;
 
   const wpr = wprRaw(candles, period);
-  const { adx, plusDI, minusDI } = adxRaw(candles, period);
+  const { adx } = adxRaw(candles, 7);
 
   for (let i = 0; i < candles.length; i++) {
     const w = wpr[i];
-    const a = adx[i];
-    const pDI = plusDI[i];
-    const mDI = minusDI[i];
+    const sig = adx[i];
+    const wPrev = i > 0 ? wpr[i - 1] : w;
+    const sigPrev = i > 0 ? adx[i - 1] : sig;
 
-    if (isNaN(w) || isNaN(a) || isNaN(pDI) || isNaN(mDI)) {
+    if (isNaN(w) || isNaN(sig) || isNaN(wPrev) || isNaN(sigPrev)) {
       continue;
     }
 
-    let color = "#787b86";
+    const forceUp = sig >= sigPrev;
+    const priceUp = w > wPrev;
+    const priceDown = w < wPrev;
+
+    let color: string;
     let trend: "bullish" | "bearish" | "neutral" = "neutral";
 
-    if (a > 22) {
-      if (pDI > mDI && w > -30) {
-        color = "#00e676"; // Verde
-        trend = "bullish";
-      } else if (mDI > pDI && w < -70) {
-        color = "#ff1744"; // Rojo
-        trend = "bearish";
-      }
+    if (w < -50 && forceUp && priceUp) {
+      color = "#00ff00"; // Verde brillante — reversión desde sobreventa con fuerza
+      trend = "bullish";
+    } else if (w > -50 && w < -27 && forceUp && priceUp) {
+      color = "#78b946"; // Verde oliva — continuación alcista zone media
+      trend = "bullish";
+    } else if (w > -27 && forceUp && priceUp) {
+      color = "#466446"; // Verde apagado — zona alta con momentum sostenido
+      trend = "bullish";
+    } else if (w > -50 && !forceUp && priceDown) {
+      color = "#fafa00"; // Amarillo — secuencia sin fuerza
+      trend = "bearish";
+    } else if (w < -50 && !forceUp && priceDown) {
+      color = "#fa8c00"; // Naranja — presión bajista sin fuerza
+      trend = "bearish";
+    } else if (w > -50 && forceUp && priceDown) {
+      color = "#fa0000"; // Rojo — giro bajista con fuerza
+      trend = "bearish";
+    } else if (w < -50 && w > -72 && forceUp && priceDown) {
+      color = "#d23c82"; // Fucsia oscuro — continuación bajista zona media-baja
+      trend = "bearish";
+    } else if (w < -72 && forceUp && priceDown) {
+      color = "#642832"; // Marrón rojizo — sobreventa extrema bajista
+      trend = "bearish";
+    } else if (w < -50 && !forceUp && priceUp) {
+      color = "#00ffff"; // Cyan — sobreventa girando al alza sin fuerza
+      trend = "bullish";
+    } else if (w > -50 && !forceUp && priceUp) {
+      color = "#1eb4e6"; // Azul celeste — zona negativa girando sin fuerza
+      trend = "bearish";
+    } else if (w < -50) {
+      color = "#ff00ff"; // Magenta — estado bajista residual de sobreventa
+      trend = "bullish";
+    } else if (w > -50) {
+      color = "#000096"; // Azul oscuro — estado alcista residual
+      trend = "bearish";
+    } else {
+      color = "#787878"; // Gris — neutral
     }
 
-    out.push({
-      time: candles[i].time,
-      color,
-      trend,
-      wpr: w,
-      adx: a,
-    });
+    out.push({ time: candles[i].time, color, trend, wpr: w, adx: sig });
   }
 
   return out;

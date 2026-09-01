@@ -146,7 +146,7 @@ function SettingsForm({ target, config, onSave, onReset }: FormProps) {
       )}
       {target === "controlTotalDoc" && (
         <Field
-          label="Periodo (WPR/ADX)"
+          label="Periodo (W%R, ADX fijo 7)"
           value={draft.controlDocPeriod}
           onChange={(n) => setDraft((d) => ({ ...d, controlDocPeriod: n }))}
         />

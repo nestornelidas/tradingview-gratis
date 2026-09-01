@@ -16,7 +16,7 @@ import {
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
-import { fetchKlines } from "@/lib/binance/rest";
+import { fetchKlines, getMarket } from "@/lib/market";
 import { getBinanceWS } from "@/lib/binance/ws";
 import {
   ema,
@@ -1013,9 +1013,10 @@ export function PriceChart({ symbol, timeframe }: Props) {
     const c = candlesRef.current;
     if (c.length === 0 || !candleSeriesRef.current) return;
     const cfg = configRef.current;
+    const storeState = useChartStore.getState();
 
     const colorsMap = new Map<number, string>();
-    if (indicators.controlTotalDoc && !hidden.controlTotalDoc) {
+    if (storeState.indicators.controlTotalDoc && !storeState.hidden.controlTotalDoc) {
       const data = calculateControlTotal(c, cfg.controlDocPeriod);
       for (const d of data) {
         colorsMap.set(d.time, d.color);
@@ -1037,11 +1038,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
                 borderColor: customColor,
                 wickColor: customColor,
               }
-            : {
-                color: undefined,
-                borderColor: undefined,
-                wickColor: undefined,
-              }),
+            : {}),
         };
       }),
     );
@@ -1210,8 +1207,9 @@ export function PriceChart({ symbol, timeframe }: Props) {
           });
         }
 
-        const ws = getBinanceWS();
-        unsub = ws.subscribeKline({
+        if (getMarket(symbol) === "crypto") {
+          const ws = getBinanceWS();
+          unsub = ws.subscribeKline({
           symbol,
           interval: timeframe,
           onCandle: (k) => {
@@ -1227,9 +1225,10 @@ export function PriceChart({ symbol, timeframe }: Props) {
               return;
             }
 
+            const storeState = useChartStore.getState();
             let customColor: string | undefined;
-            if (indicators.controlTotalDoc && !hidden.controlTotalDoc) {
-              const data = calculateControlTotal(arr, configRef.current.controlDocPeriod);
+            if (storeState.indicators.controlTotalDoc && !storeState.hidden.controlTotalDoc) {
+              const data = calculateControlTotal(arr, storeState.config.controlDocPeriod);
               customColor = data.at(-1)?.color;
             }
 
@@ -1245,11 +1244,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
                     borderColor: customColor,
                     wickColor: customColor,
                   }
-                : {
-                    color: undefined,
-                    borderColor: undefined,
-                    wickColor: undefined,
-                  }),
+                : {}),
             });
             if (volumeSeriesRef.current) {
               volumeSeriesRef.current.update({
@@ -1271,6 +1266,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
             });
           },
         });
+        }
       } catch (e) {
         console.error("Failed to load chart data:", e);
       }
