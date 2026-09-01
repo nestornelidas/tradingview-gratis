@@ -27,6 +27,7 @@ import {
   calculateMultiavisos,
 } from "@/lib/indicators";
 import type { Candle, Timeframe } from "@/lib/binance/types";
+import { FillBand } from "@/lib/chart/fillBand";
 import {
   INDICATOR_COLORS,
   useChartStore,
@@ -191,18 +192,18 @@ export function PriceChart({ symbol, timeframe }: Props) {
   const tunelDomenecBaixRef = useRef<ISeriesApi<"Line"> | null>(null);
   const tunelDomenecEma8Ref = useRef<ISeriesApi<"Line"> | null>(null);
   const tunelDomenecWilder8Ref = useRef<ISeriesApi<"Line"> | null>(null);
-  const tunelFillGreenRef = useRef<ISeriesApi<"Area"> | null>(null);
-  const tunelFillRedRef = useRef<ISeriesApi<"Area"> | null>(null);
+  const tunelFillGreenRef = useRef<FillBand | null>(null);
+  const tunelFillRedRef = useRef<FillBand | null>(null);
   // Cintas del Túnel de Domènec (3 túneles × 2 EMAs cada uno + relleno)
   const tunelCinta1LRef = useRef<ISeriesApi<"Line"> | null>(null);
   const tunelCinta1HRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const tunelCinta1FillRef = useRef<ISeriesApi<"Area"> | null>(null);
+  const tunelCinta1FillRef = useRef<FillBand | null>(null);
   const tunelCinta2LRef = useRef<ISeriesApi<"Line"> | null>(null);
   const tunelCinta2HRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const tunelCinta2FillRef = useRef<ISeriesApi<"Area"> | null>(null);
+  const tunelCinta2FillRef = useRef<FillBand | null>(null);
   const tunelCinta3LRef = useRef<ISeriesApi<"Line"> | null>(null);
   const tunelCinta3HRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const tunelCinta3FillRef = useRef<ISeriesApi<"Area"> | null>(null);
+  const tunelCinta3FillRef = useRef<FillBand | null>(null);
   const almaOscRef = useRef<ISeriesApi<"Line"> | null>(null);
 
   const indicators = useChartStore((s) => s.indicators);
@@ -684,22 +685,15 @@ export function PriceChart({ symbol, timeframe }: Props) {
         lastValueVisible: false,
       }, 0);
 
-      // Fill entre EMA8 y Wilder8 (Zona de Corrección) — verde/rojo según cruce
-      const fillGreen = chartRef.current.addSeries(AreaSeries, {
-        lineVisible: false,
-        topColor: "rgba(0, 230, 118, 0.20)",
-        bottomColor: "rgba(0, 230, 118, 0.05)",
-        priceLineVisible: false,
-        lastValueVisible: false,
-      }, 0);
-
-      const fillRed = chartRef.current.addSeries(AreaSeries, {
-        lineVisible: false,
-        topColor: "rgba(255, 23, 68, 0.20)",
-        bottomColor: "rgba(255, 23, 68, 0.05)",
-        priceLineVisible: false,
-        lastValueVisible: false,
-      }, 0);
+      // Fill Zona de Corrección — banda entre EMA8 y Wilder8, verde/rojo según cruce
+      const fillGreen = new FillBand(ema8, wilder8, {
+        color: "#00e676",
+        opacity: 0.22,
+        colorFor: (a, b) => (a > b ? "#00e676" : "#ff1744"),
+      });
+      ema8.attachPrimitive(fillGreen);
+      tunelFillGreenRef.current = fillGreen;
+      tunelFillRedRef.current = null;
 
       // Cintas institucionales del Túnel de Domènec (3 túneles)
       const cinta1L = chartRef.current.addSeries(LineSeries, {
@@ -714,13 +708,11 @@ export function PriceChart({ symbol, timeframe }: Props) {
         priceLineVisible: false,
         lastValueVisible: false,
       }, 0);
-      const cinta1Fill = chartRef.current.addSeries(AreaSeries, {
-        lineVisible: false,
-        topColor: "rgba(41, 98, 255, 0.25)",
-        bottomColor: "rgba(41, 98, 255, 0.25)",
-        priceLineVisible: false,
-        lastValueVisible: false,
-      }, 0);
+      const cinta1Fill = new FillBand(cinta1L, cinta1H, {
+        color: "#2962ff",
+        opacity: 0.25,
+      });
+      cinta1L.attachPrimitive(cinta1Fill);
 
       const cinta2L = chartRef.current.addSeries(LineSeries, {
         color: "#faca51",
@@ -734,13 +726,11 @@ export function PriceChart({ symbol, timeframe }: Props) {
         priceLineVisible: false,
         lastValueVisible: false,
       }, 0);
-      const cinta2Fill = chartRef.current.addSeries(AreaSeries, {
-        lineVisible: false,
-        topColor: "rgba(250, 202, 81, 0.25)",
-        bottomColor: "rgba(250, 202, 81, 0.25)",
-        priceLineVisible: false,
-        lastValueVisible: false,
-      }, 0);
+      const cinta2Fill = new FillBand(cinta2L, cinta2H, {
+        color: "#faca51",
+        opacity: 0.25,
+      });
+      cinta2L.attachPrimitive(cinta2Fill);
 
       const cinta3L = chartRef.current.addSeries(LineSeries, {
         color: "#ff1493",
@@ -754,13 +744,11 @@ export function PriceChart({ symbol, timeframe }: Props) {
         priceLineVisible: false,
         lastValueVisible: false,
       }, 0);
-      const cinta3Fill = chartRef.current.addSeries(AreaSeries, {
-        lineVisible: false,
-        topColor: "rgba(255, 20, 147, 0.25)",
-        bottomColor: "rgba(255, 20, 147, 0.25)",
-        priceLineVisible: false,
-        lastValueVisible: false,
-      }, 0);
+      const cinta3Fill = new FillBand(cinta3L, cinta3H, {
+        color: "#ff1493",
+        opacity: 0.25,
+      });
+      cinta3L.attachPrimitive(cinta3Fill);
 
       tunelDomenecC9Ref.current = c9;
       tunelDomenecAltRef.current = alt;
@@ -768,7 +756,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
       tunelDomenecEma8Ref.current = ema8;
       tunelDomenecWilder8Ref.current = wilder8;
       tunelFillGreenRef.current = fillGreen;
-      tunelFillRedRef.current = fillRed;
+      tunelFillRedRef.current = null;
       tunelCinta1LRef.current = cinta1L;
       tunelCinta1HRef.current = cinta1H;
       tunelCinta1FillRef.current = cinta1Fill;
@@ -786,17 +774,12 @@ export function PriceChart({ symbol, timeframe }: Props) {
       if (tunelDomenecBaixRef.current) chartRef.current.removeSeries(tunelDomenecBaixRef.current);
       if (tunelDomenecEma8Ref.current) chartRef.current.removeSeries(tunelDomenecEma8Ref.current);
       if (tunelDomenecWilder8Ref.current) chartRef.current.removeSeries(tunelDomenecWilder8Ref.current);
-      if (tunelFillGreenRef.current) chartRef.current.removeSeries(tunelFillGreenRef.current);
-      if (tunelFillRedRef.current) chartRef.current.removeSeries(tunelFillRedRef.current);
       if (tunelCinta1LRef.current) chartRef.current.removeSeries(tunelCinta1LRef.current);
       if (tunelCinta1HRef.current) chartRef.current.removeSeries(tunelCinta1HRef.current);
-      if (tunelCinta1FillRef.current) chartRef.current.removeSeries(tunelCinta1FillRef.current);
       if (tunelCinta2LRef.current) chartRef.current.removeSeries(tunelCinta2LRef.current);
       if (tunelCinta2HRef.current) chartRef.current.removeSeries(tunelCinta2HRef.current);
-      if (tunelCinta2FillRef.current) chartRef.current.removeSeries(tunelCinta2FillRef.current);
       if (tunelCinta3LRef.current) chartRef.current.removeSeries(tunelCinta3LRef.current);
       if (tunelCinta3HRef.current) chartRef.current.removeSeries(tunelCinta3HRef.current);
-      if (tunelCinta3FillRef.current) chartRef.current.removeSeries(tunelCinta3FillRef.current);
 
       tunelDomenecC9Ref.current = null;
       tunelDomenecAltRef.current = null;
@@ -865,17 +848,12 @@ export function PriceChart({ symbol, timeframe }: Props) {
     tunelDomenecBaixRef.current?.applyOptions({ visible: v("tunelDomenec") });
     tunelDomenecEma8Ref.current?.applyOptions({ visible: v("tunelDomenec") });
     tunelDomenecWilder8Ref.current?.applyOptions({ visible: v("tunelDomenec") });
-    tunelFillGreenRef.current?.applyOptions({ visible: v("tunelDomenec") });
-    tunelFillRedRef.current?.applyOptions({ visible: v("tunelDomenec") });
     tunelCinta1LRef.current?.applyOptions({ visible: v("tunelDomenec") });
     tunelCinta1HRef.current?.applyOptions({ visible: v("tunelDomenec") });
-    tunelCinta1FillRef.current?.applyOptions({ visible: v("tunelDomenec") });
     tunelCinta2LRef.current?.applyOptions({ visible: v("tunelDomenec") });
     tunelCinta2HRef.current?.applyOptions({ visible: v("tunelDomenec") });
-    tunelCinta2FillRef.current?.applyOptions({ visible: v("tunelDomenec") });
     tunelCinta3LRef.current?.applyOptions({ visible: v("tunelDomenec") });
     tunelCinta3HRef.current?.applyOptions({ visible: v("tunelDomenec") });
-    tunelCinta3FillRef.current?.applyOptions({ visible: v("tunelDomenec") });
     if (almaOscRef.current) almaOscRef.current.applyOptions({ visible: v("multiAvisos") });
 
     // Limpiar o actualizar marcadores
@@ -1105,8 +1083,6 @@ export function PriceChart({ symbol, timeframe }: Props) {
     // lightweight-charts rejects NaN values, so drop points with bad numbers
     const line = (points: { time: UTCTimestamp; value?: number }[]) =>
       points.filter((p) => !isNaN(p.value as number));
-    const fill = (points: { time: UTCTimestamp; top: number; bottom: number }[]) =>
-      points.filter((p) => !isNaN(p.top) && !isNaN(p.bottom));
 
     if (tunelDomenecC9Ref.current) {
       tunelDomenecC9Ref.current.setData(
@@ -1140,29 +1116,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
       );
     }
 
-    // Fill Zona de Corrección — banda entre EMA8 y Wilder8 (verde/rojo)
-    if (tunelFillGreenRef.current) {
-      tunelFillGreenRef.current.setData(
-        fill(
-          data.map((p) =>
-            p.ema8 >= p.wilder8
-              ? { time: p.time as UTCTimestamp, top: p.ema8, bottom: p.wilder8 }
-              : { time: p.time as UTCTimestamp, top: NaN, bottom: NaN },
-          ),
-        ),
-      );
-    }
-    if (tunelFillRedRef.current) {
-      tunelFillRedRef.current.setData(
-        fill(
-          data.map((p) =>
-            p.ema8 < p.wilder8
-              ? { time: p.time as UTCTimestamp, top: p.wilder8, bottom: p.ema8 }
-              : { time: p.time as UTCTimestamp, top: NaN, bottom: NaN },
-          ),
-        ),
-      );
-    }
+    // Fill Zona de Corrección — lo dibuja el plugin FillBand (verde/rojo según cruce ema8/wilder8).
 
     // Cintas institucionales del Túnel de Domènec — 3 túneles de EMAs
     if (tunelCinta1LRef.current) {
@@ -1173,17 +1127,6 @@ export function PriceChart({ symbol, timeframe }: Props) {
     if (tunelCinta1HRef.current) {
       tunelCinta1HRef.current.setData(
         line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema188 }))),
-      );
-    }
-    if (tunelCinta1FillRef.current) {
-      tunelCinta1FillRef.current.setData(
-        fill(
-          data.map((p) => ({
-            time: p.time as UTCTimestamp,
-            top: Math.max(p.pema123, p.pema188),
-            bottom: Math.min(p.pema123, p.pema188),
-          })),
-        ),
       );
     }
 
@@ -1197,17 +1140,6 @@ export function PriceChart({ symbol, timeframe }: Props) {
         line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema618 }))),
       );
     }
-    if (tunelCinta2FillRef.current) {
-      tunelCinta2FillRef.current.setData(
-        fill(
-          data.map((p) => ({
-            time: p.time as UTCTimestamp,
-            top: Math.max(p.pema416, p.pema618),
-            bottom: Math.min(p.pema416, p.pema618),
-          })),
-        ),
-      );
-    }
 
     if (tunelCinta3LRef.current) {
       tunelCinta3LRef.current.setData(
@@ -1217,17 +1149,6 @@ export function PriceChart({ symbol, timeframe }: Props) {
     if (tunelCinta3HRef.current) {
       tunelCinta3HRef.current.setData(
         line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.pema1223 }))),
-      );
-    }
-    if (tunelCinta3FillRef.current) {
-      tunelCinta3FillRef.current.setData(
-        fill(
-          data.map((p) => ({
-            time: p.time as UTCTimestamp,
-            top: Math.max(p.pema882, p.pema1223),
-            bottom: Math.min(p.pema882, p.pema1223),
-          })),
-        ),
       );
     }
 
