@@ -188,8 +188,6 @@ export function PriceChart({ symbol, timeframe }: Props) {
 
   // Refs de indicadores nuevos
   const tunelDomenecC9Ref = useRef<ISeriesApi<"Line"> | null>(null);
-  const tunelDomenecAltRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const tunelDomenecBaixRef = useRef<ISeriesApi<"Line"> | null>(null);
   const tunelDomenecEma8Ref = useRef<ISeriesApi<"Line"> | null>(null);
   const tunelDomenecWilder8Ref = useRef<ISeriesApi<"Line"> | null>(null);
   const tunelFillGreenRef = useRef<FillBand | null>(null);
@@ -491,8 +489,6 @@ export function PriceChart({ symbol, timeframe }: Props) {
       macdSignalRef.current = null;
       macdHistRef.current = null;
       tunelDomenecC9Ref.current = null;
-      tunelDomenecAltRef.current = null;
-      tunelDomenecBaixRef.current = null;
       tunelDomenecEma8Ref.current = null;
       tunelDomenecWilder8Ref.current = null;
       tunelFillGreenRef.current = null;
@@ -657,20 +653,6 @@ export function PriceChart({ symbol, timeframe }: Props) {
         lastValueVisible: false,
       }, 0);
 
-      const alt = chartRef.current.addSeries(LineSeries, {
-        color: "#00e5ff",
-        lineWidth: 1,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      }, 0);
-
-      const baix = chartRef.current.addSeries(LineSeries, {
-        color: "#00e5ff",
-        lineWidth: 1,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      }, 0);
-
       const ema8 = chartRef.current.addSeries(LineSeries, {
         color: "#00e676",
         lineWidth: 1,
@@ -751,8 +733,6 @@ export function PriceChart({ symbol, timeframe }: Props) {
       cinta3L.attachPrimitive(cinta3Fill);
 
       tunelDomenecC9Ref.current = c9;
-      tunelDomenecAltRef.current = alt;
-      tunelDomenecBaixRef.current = baix;
       tunelDomenecEma8Ref.current = ema8;
       tunelDomenecWilder8Ref.current = wilder8;
       tunelFillGreenRef.current = fillGreen;
@@ -770,8 +750,6 @@ export function PriceChart({ symbol, timeframe }: Props) {
       updateTunelDomenec();
     } else if (!indicators.tunelDomenec && tunelDomenecC9Ref.current && chartRef.current) {
       chartRef.current.removeSeries(tunelDomenecC9Ref.current);
-      if (tunelDomenecAltRef.current) chartRef.current.removeSeries(tunelDomenecAltRef.current);
-      if (tunelDomenecBaixRef.current) chartRef.current.removeSeries(tunelDomenecBaixRef.current);
       if (tunelDomenecEma8Ref.current) chartRef.current.removeSeries(tunelDomenecEma8Ref.current);
       if (tunelDomenecWilder8Ref.current) chartRef.current.removeSeries(tunelDomenecWilder8Ref.current);
       if (tunelCinta1LRef.current) chartRef.current.removeSeries(tunelCinta1LRef.current);
@@ -782,8 +760,6 @@ export function PriceChart({ symbol, timeframe }: Props) {
       if (tunelCinta3HRef.current) chartRef.current.removeSeries(tunelCinta3HRef.current);
 
       tunelDomenecC9Ref.current = null;
-      tunelDomenecAltRef.current = null;
-      tunelDomenecBaixRef.current = null;
       tunelDomenecEma8Ref.current = null;
       tunelDomenecWilder8Ref.current = null;
       tunelFillGreenRef.current = null;
@@ -844,8 +820,6 @@ export function PriceChart({ symbol, timeframe }: Props) {
 
     // Visibilidad de los nuevos indicadores
     tunelDomenecC9Ref.current?.applyOptions({ visible: v("tunelDomenec") });
-    tunelDomenecAltRef.current?.applyOptions({ visible: v("tunelDomenec") });
-    tunelDomenecBaixRef.current?.applyOptions({ visible: v("tunelDomenec") });
     tunelDomenecEma8Ref.current?.applyOptions({ visible: v("tunelDomenec") });
     tunelDomenecWilder8Ref.current?.applyOptions({ visible: v("tunelDomenec") });
     tunelCinta1LRef.current?.applyOptions({ visible: v("tunelDomenec") });
@@ -1093,16 +1067,6 @@ export function PriceChart({ symbol, timeframe }: Props) {
             color: p.c9Color,
           })),
         ),
-      );
-    }
-    if (tunelDomenecAltRef.current) {
-      tunelDomenecAltRef.current.setData(
-        line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.alt }))),
-      );
-    }
-    if (tunelDomenecBaixRef.current) {
-      tunelDomenecBaixRef.current.setData(
-        line(data.map((p) => ({ time: p.time as UTCTimestamp, value: p.baix }))),
       );
     }
     if (tunelDomenecEma8Ref.current) {

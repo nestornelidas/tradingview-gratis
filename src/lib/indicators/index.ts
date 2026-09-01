@@ -346,8 +346,6 @@ export interface TunelDomenecResult {
   time: number;
   c9: number;
   c9Color: string;
-  alt: number;
-  baix: number;
   ema8: number;
   wilder8: number;
   pema123: number;
@@ -379,26 +377,18 @@ export function calculateTunelDomenec(
   const smoothPrice = rmaRaw(closes, velasBanda);
   const smoothRange = rmaRaw(ranges, velasBanda);
 
-  const alt1: number[] = [];
-  const baix1: number[] = [];
   const mitjana: number[] = [];
 
   for (let i = 0; i < candles.length; i++) {
     const sp = smoothPrice[i];
     const sr = smoothRange[i];
     if (isNaN(sp) || isNaN(sr)) {
-      alt1.push(NaN);
-      baix1.push(NaN);
       mitjana.push(NaN);
     } else {
-      alt1.push(sp + sr * desviacio);
-      baix1.push(sp - sr * desviacio);
       mitjana.push(sp);
     }
   }
 
-  const alt = demaRaw(alt1, velasBanda);
-  const baix = demaRaw(baix1, velasBanda);
   const sma34 = smaRaw(closes, 34);
 
   const ema8 = emaRaw(closes, ema8Period);
@@ -414,16 +404,12 @@ export function calculateTunelDomenec(
   for (let i = 0; i < candles.length; i++) {
     const m = mitjana[i];
     const s34 = sma34[i];
-    const a = alt[i];
-    const b = baix[i];
     const e8 = ema8[i];
     const w8 = wilder8[i];
 
     if (
       isNaN(m) ||
       isNaN(s34) ||
-      isNaN(a) ||
-      isNaN(b) ||
       isNaN(e8) ||
       isNaN(w8)
     ) {
@@ -443,8 +429,6 @@ export function calculateTunelDomenec(
       time: candles[i].time,
       c9: c9Val,
       c9Color,
-      alt: a,
-      baix: b,
       ema8: e8,
       wilder8: w8,
       pema123: pema123[i],
