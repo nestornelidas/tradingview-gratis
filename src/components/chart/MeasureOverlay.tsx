@@ -14,6 +14,7 @@ interface Props {
   durationText: string;
   isUp: boolean;
   isPreview: boolean;
+  onDelete?: () => void;
 }
 
 const UP_STROKE = "#26a69a";
@@ -33,6 +34,7 @@ export function MeasureOverlay({
   durationText,
   isUp,
   isPreview,
+  onDelete,
 }: Props) {
   const stroke = isUp ? UP_STROKE : DOWN_STROKE;
   const fill = isUp ? UP_FILL : DOWN_FILL;
@@ -120,10 +122,25 @@ export function MeasureOverlay({
           color: "#ffffff",
         }}
       >
-        <div>
-          {sign}
-          {formatPrice(priceDiff)} ({pctSign}
-          {pctChange.toFixed(2)}%)
+        <div className="flex items-center justify-between gap-2">
+          <span>
+            {sign}
+            {formatPrice(priceDiff)} ({pctSign}
+            {pctChange.toFixed(2)}%)
+          </span>
+          {onDelete && !isPreview && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="pointer-events-auto ml-1 flex h-4 w-4 items-center justify-center rounded text-white/80 hover:bg-black/20 hover:text-white"
+              title="Borrar medida"
+              style={{ lineHeight: 1 }}
+            >
+             ✕
+            </button>
+          )}
         </div>
         <div className="opacity-90">
           {bars} barras · {durationText}

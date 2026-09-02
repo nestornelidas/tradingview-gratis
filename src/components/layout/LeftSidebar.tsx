@@ -1,6 +1,6 @@
 "use client";
 
-import { MousePointer2, Minus, Ruler, Trash2, Lock } from "lucide-react";
+import { MousePointer2, Minus, Ruler, Eraser, Trash2, Lock } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useChartStore, type DrawingTool } from "@/lib/store/chart-store";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,12 @@ const TOOLS: ToolDef[] = [
     icon: Ruler,
     label: "Regla / Medir",
     hint: "Click en dos puntos para medir Δ precio, %, barras y volumen",
+  },
+  {
+    key: "eraser",
+    icon: Eraser,
+    label: "Goma de borrar",
+    hint: "Click sobre un dibujo para eliminarlo",
   },
 ];
 

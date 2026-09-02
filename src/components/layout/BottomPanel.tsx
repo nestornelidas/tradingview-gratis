@@ -9,15 +9,14 @@ import { cn } from "@/lib/utils";
 
 export function BottomPanel() {
   const symbol = useChartStore((s) => s.symbol);
-  const [t, setT] = useState<Ticker24h | null>(null);
+  const [t, setT] = useState<{ symbol: string; tick: Ticker24h } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setT(null);
     const load = () => {
       fetchTicker24h(symbol)
         .then((x) => {
-          if (!cancelled) setT(x);
+          if (!cancelled) setT({ symbol, tick: x });
         })
         .catch(console.error);
     };
@@ -29,6 +28,7 @@ export function BottomPanel() {
     };
   }, [symbol]);
 
+  const tick = t && t.symbol === symbol ? t.tick : null;
   const upClass = (n: number) => (n >= 0 ? "text-tv-green" : "text-tv-red");
 
   return (
@@ -36,26 +36,26 @@ export function BottomPanel() {
       <Stat label="Símbolo" value={symbol} />
       <Stat
         label="24h Cambio"
-        value={t ? formatPct(t.priceChangePercent) : "—"}
-        valueClass={t ? upClass(t.priceChangePercent) : ""}
+        value={tick ? formatPct(tick.priceChangePercent) : "—"}
+        valueClass={tick ? upClass(tick.priceChangePercent) : ""}
       />
       <Stat
         label="24h Alto"
-        value={t ? formatPrice(t.highPrice) : "—"}
+        value={tick ? formatPrice(tick.highPrice) : "—"}
         valueClass="text-tv-green"
       />
       <Stat
         label="24h Bajo"
-        value={t ? formatPrice(t.lowPrice) : "—"}
+        value={tick ? formatPrice(tick.lowPrice) : "—"}
         valueClass="text-tv-red"
       />
       <Stat
         label="24h Vol (base)"
-        value={t ? formatVolume(t.volume) : "—"}
+        value={tick ? formatVolume(tick.volume) : "—"}
       />
       <Stat
         label="24h Vol (USDT)"
-        value={t ? formatVolume(t.quoteVolume) : "—"}
+        value={tick ? formatVolume(tick.quoteVolume) : "—"}
       />
       <div className="ml-auto flex items-center gap-2 text-[10px] text-tv-text-dim">
         <span className="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-tv-green" />

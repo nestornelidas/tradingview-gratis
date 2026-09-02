@@ -13,6 +13,7 @@ import {
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   type IPriceLine,
+  type LineWidth,
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
@@ -30,24 +31,17 @@ import type { Candle, Timeframe } from "@/lib/binance/types";
 import { FillBand } from "@/lib/chart/fillBand";
 import {
   INDICATOR_COLORS,
+  INITIAL_MEASURE,
   useChartStore,
   type IndicatorKey,
   type MagnetStrength,
+  type MeasureState,
 } from "@/lib/store/chart-store";
 import { formatPrice, formatVolume } from "@/lib/format";
 import { IndicatorPill } from "./IndicatorPill";
 import { MeasureOverlay } from "./MeasureOverlay";
-
-interface MeasurePoint {
-  time: number;
-  price: number;
-}
-interface MeasureState {
-  phase: "idle" | "placing" | "done";
-  a: MeasurePoint | null;
-  b: MeasurePoint | null;
-}
-const INITIAL_MEASURE: MeasureState = { phase: "idle", a: null, b: null };
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 // ── Magnet / Snap-to-OHLC ─────────────────────────────────────────────────────
 interface SnapPoint {
@@ -137,6 +131,24 @@ const TV_COLORS = {
   purple: "#ab47bc",
   grid: "#1e222d",
 };
+
+const PRICE_LINE_COLORS = [
+  "#2962ff",
+  "#26a69a",
+  "#ef5350",
+  "#ffb74d",
+  "#ab47bc",
+  "#00e5ff",
+  "#00e676",
+  "#ffea00",
+  "#ff7043",
+  "#ec407a",
+  "#7e57c2",
+  "#78909c",
+  "#ffffff",
+];
+
+const PRICE_LINE_WIDTHS = [1, 2, 3, 4] as const;
 
 interface HoverInfo {
   o: number;
@@ -229,16 +241,82 @@ export function PriceChart({ symbol, timeframe }: Props) {
   magnetStrengthRef.current = magnetStrength;
   const addPriceLineRef = useRef(addPriceLine);
   addPriceLineRef.current = addPriceLine;
+  const updatePriceLine = useChartStore((s) => s.updatePriceLine);
+  const updatePriceLineRef = useRef(updatePriceLine);
+  updatePriceLineRef.current = updatePriceLine;
+  const removePriceLine = useChartStore((s) => s.removePriceLine);
+  const removePriceLineRef = useRef(removePriceLine);
+  removePriceLineRef.current = removePriceLine;
   const symbolRef = useRef(symbol);
   symbolRef.current = symbol;
   const configRef = useRef(config);
   configRef.current = config;
+  const priceLinesRef = useRef(priceLines);
+  priceLinesRef.current = priceLines;
+  const priceDragRef = useRef<{ id: string; moved: boolean; currentPrice?: number } | null>(null);
+  const [editingLine, setEditingLine] = useState<{
+    id: string;
+    price: number;
+    color: string;
+    lineWidth: number;
+  } | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [editColor, setEditColor] = useState(TV_COLORS.blue);
+  const [editWidth, setEditWidth] = useState(1);
+  const prevSymbolForEditorRef = useRef(symbol);
+  if (prevSymbolForEditorRef.current !== symbol) {
+    prevSymbolForEditorRef.current = symbol;
+    setEditingLine(null);
+  }
+
+  const priceLineAt = (py: number, tolerance: number): string | null => {
+    const series = candleSeriesRef.current;
+    if (!series) return null;
+    const lines = priceLinesRef.current.filter(
+      (p) => p.symbol === symbolRef.current,
+    );
+    let bestId: string | null = null;
+    let bestDist = Infinity;
+    for (const pl of lines) {
+      const y = series.priceToCoordinate(pl.price);
+      if (y === null) continue;
+      const dist = Math.abs(y - py);
+      if (dist <= tolerance && dist < bestDist) {
+        bestDist = dist;
+        bestId = pl.id;
+      }
+    }
+    return bestId;
+  };
+
+  const isGrabbableTool = () =>
+    toolRef.current === "cursor" || toolRef.current === "hline";
+
+  // Hit test de dibujos sobre el chart. Se amplía al añadir más tipos de dibujo
+  // (tendencias, rectángulos, texto, fibonacci, etc.).
+  type DrawingHit = { kind: "priceLine"; id: string } | null;
+  const hitTestDrawing = (py: number): DrawingHit => {
+    const id = priceLineAt(py, 12);
+    return id ? { kind: "priceLine", id } : null;
+  };
+  const hitTestDrawingRef = useRef(hitTestDrawing);
+  hitTestDrawingRef.current = hitTestDrawing;
 
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [lastPrice, setLastPrice] = useState<{ value: number; pct: number } | null>(null);
   const [lastValues, setLastValues] = useState<LastValues>({});
   const [paneOffsets, setPaneOffsets] = useState<PaneOffset[]>([]);
-  const [measure, setMeasure] = useState<MeasureState>(INITIAL_MEASURE);
+  // Measure state now lives in the persisted store, keyed by symbol
+  const measure = useChartStore((s) => s.measureBySymbol[symbol] ?? INITIAL_MEASURE);
+  const setMeasureForSymbol = useChartStore((s) => s.setMeasureForSymbol);
+  const clearMeasureForSymbol = useChartStore((s) => s.clearMeasureForSymbol);
+  const updateMeasure = (updater: MeasureState | ((prev: MeasureState) => MeasureState)) => {
+    const prev = measureRef.current;
+    const next = typeof updater === "function" ? updater(prev) : updater;
+    setMeasureForSymbol(symbol, next);
+  };
+  const updateMeasureRef = useRef(updateMeasure);
+  updateMeasureRef.current = updateMeasure;
   const [renderTick, setRenderTick] = useState(0);
   const measureRef = useRef(measure);
   measureRef.current = measure;
@@ -246,11 +324,10 @@ export function PriceChart({ symbol, timeframe }: Props) {
   const [snapDot, setSnapDot] = useState<SnapPoint | null>(null);
   const snapDotRef = useRef<SnapPoint | null>(null);
 
-  // Reset measure/snap when leaving their tools (render-time prev-value pattern)
+  // Reset snap when leaving the magnet tool (render-time prev-value pattern)
   const [prevTool, setPrevTool] = useState(tool);
   if (prevTool !== tool) {
     setPrevTool(tool);
-    if (prevTool === "measure") setMeasure(INITIAL_MEASURE);
     if (prevTool === "magnet") {
       setSnapDot(null);
       snapDotRef.current = null;
@@ -351,6 +428,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
       if (price === null || !isFinite(price as number)) return;
 
       if (toolRef.current === "hline") {
+        if (priceLineAt(param.point.y, 8)) return;
         addPriceLineRef.current(price as number, symbolRef.current);
         return;
       }
@@ -360,19 +438,19 @@ export function PriceChart({ symbol, timeframe }: Props) {
         if (!time) return;
         const current = measureRef.current;
         if (current.phase === "idle") {
-          setMeasure({
+          updateMeasureRef.current({
             phase: "placing",
             a: { time, price: price as number },
             b: { time, price: price as number },
           });
         } else if (current.phase === "placing") {
-          setMeasure({
+          updateMeasureRef.current({
             phase: "done",
             a: current.a,
             b: { time, price: price as number },
           });
         } else {
-          setMeasure({
+          updateMeasureRef.current({
             phase: "placing",
             a: { time, price: price as number },
             b: { time, price: price as number },
@@ -427,7 +505,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
           : candleSeriesRef.current.coordinateToPrice(param.point.y);
         if (price !== null && isFinite(price as number)) {
           const time = snapped ? snapped.time : Number(param.time);
-          setMeasure((prev) =>
+          updateMeasureRef.current((prev) =>
             prev.phase === "placing" ? { ...prev, b: { time, price: price as number } } : prev,
           );
         }
@@ -885,11 +963,22 @@ export function PriceChart({ symbol, timeframe }: Props) {
       }
     }
     for (const pl of linesForThisSymbol) {
-      if (!map.has(pl.id)) {
+      const existing = map.get(pl.id);
+      if (existing) {
+        const color = pl.color ?? TV_COLORS.blue;
+        const lineWidth = (pl.lineWidth ?? 1) as LineWidth;
+        if (
+          existing.options().price !== pl.price ||
+          existing.options().color !== color ||
+          existing.options().lineWidth !== lineWidth
+        ) {
+          existing.applyOptions({ price: pl.price, color, lineWidth });
+        }
+      } else {
         const apiLine = series.createPriceLine({
           price: pl.price,
-          color: TV_COLORS.blue,
-          lineWidth: 1,
+          color: pl.color ?? TV_COLORS.blue,
+          lineWidth: (pl.lineWidth ?? 1) as LineWidth,
           lineStyle: 2,
           axisLabelVisible: true,
           title: "",
@@ -899,11 +988,103 @@ export function PriceChart({ symbol, timeframe }: Props) {
     }
   }, [priceLines, symbol]);
 
+  // Interacción con líneas horizontales: arrastrar para mover, doble clic para editar valor
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      if (e.target instanceof HTMLElement && e.target.closest("button")) return;
+      const box = containerRef.current;
+      if (!box) return;
+      const rect = box.getBoundingClientRect();
+      const py = e.clientY - rect.top;
+
+      // Goma de borrar: elimina el dibujo bajo el cursor
+      if (toolRef.current === "eraser") {
+        const hit = hitTestDrawingRef.current(py);
+        if (hit && hit.kind === "priceLine") {
+          removePriceLineRef.current(hit.id);
+        }
+        return;
+      }
+
+      if (!isGrabbableTool()) return;
+      const id = priceLineAt(py, 10);
+      if (!id) return;
+      priceDragRef.current = { id, moved: false };
+      chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: false } });
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      const drag = priceDragRef.current;
+      if (!drag || !containerRef.current) return;
+      const series = candleSeriesRef.current;
+      const rect = containerRef.current.getBoundingClientRect();
+      const price = series?.coordinateToPrice(e.clientY - rect.top);
+      if (price === null || price === undefined) return;
+      const line = priceLinesMapRef.current.get(drag.id);
+      if (!line) return;
+      line.applyOptions({ price: price as number });
+      drag.moved = true;
+      drag.currentPrice = price as number;
+    };
+
+    const onMouseUp = () => {
+      const drag = priceDragRef.current;
+      if (drag && drag.moved && drag.currentPrice !== undefined) {
+        updatePriceLineRef.current(drag.id, { price: drag.currentPrice });
+      }
+      priceDragRef.current = null;
+      chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: true } });
+    };
+
+    const onDblClick = (e: MouseEvent) => {
+      if (!isGrabbableTool() || !containerRef.current) return;
+      if (
+        e.target instanceof HTMLElement &&
+        e.target.closest("button, input, [role='dialog']")
+      )
+        return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const id = priceLineAt(e.clientY - rect.top, 14);
+      if (!id) return;
+      const pl = priceLinesRef.current.find((p) => p.id === id);
+      if (pl) {
+        setEditValue(String(pl.price));
+        setEditColor(pl.color ?? TV_COLORS.blue);
+        setEditWidth(pl.lineWidth ?? 1);
+        setEditingLine({
+          id: pl.id,
+          price: pl.price,
+          color: pl.color ?? TV_COLORS.blue,
+          lineWidth: pl.lineWidth ?? 1,
+        });
+      }
+    };
+
+    el.addEventListener("mousedown", onMouseDown, { capture: true });
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    el.addEventListener("dblclick", onDblClick, { capture: true });
+    return () => {
+      el.removeEventListener("mousedown", onMouseDown, { capture: true });
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      el.removeEventListener("dblclick", onDblClick, { capture: true });
+      priceDragRef.current = null;
+      chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: true } });
+    };
+  }, []);
+
   // Cursor style when drawing tools are active
   useEffect(() => {
     if (containerRef.current) {
       containerRef.current.style.cursor =
-        tool === "hline" || tool === "measure" || tool === "magnet" ? "crosshair" : "";
+        tool === "hline" || tool === "measure" || tool === "magnet" || tool === "eraser"
+          ? "crosshair"
+          : "";
     }
   }, [tool]);
 
@@ -1051,9 +1232,9 @@ export function PriceChart({ symbol, timeframe }: Props) {
 
     const data = calculateTunelDomenec(c, cfg.tunelPeriod1, 3.14159265, 8, 8);
 
-    // lightweight-charts rejects NaN values, so drop points with bad numbers
+    // lightweight-charts rejects NaN/Infinity values, so drop non-finite points
     const line = (points: { time: UTCTimestamp; value?: number }[]) =>
-      points.filter((p) => !isNaN(p.value as number));
+      points.filter((p) => Number.isFinite(p.value));
 
     if (tunelDomenecC9Ref.current) {
       tunelDomenecC9Ref.current.setData(
@@ -1330,6 +1511,7 @@ export function PriceChart({ symbol, timeframe }: Props) {
           durationText={dur}
           isUp={isUp}
           isPreview={measure.phase === "placing"}
+          onDelete={measure.phase === "done" ? () => clearMeasureForSymbol(symbol) : undefined}
         />
       );
     }
@@ -1603,6 +1785,122 @@ export function PriceChart({ symbol, timeframe }: Props) {
           />
         </div>
       )}
+
+      {/* ── Editor de propiedades de línea horizontal ── */}
+      <Dialog
+        open={editingLine !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingLine(null);
+        }}
+      >
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Propiedades de la línea</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <Input
+              type="number"
+              step="any"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const v = parseFloat(editValue);
+                  if (isFinite(v) && editingLine) {
+                    updatePriceLine(editingLine.id, {
+                      price: v,
+                      color: editColor,
+                      lineWidth: editWidth,
+                    });
+                    setEditingLine(null);
+                  }
+                }
+                if (e.key === "Escape") setEditingLine(null);
+              }}
+              autoFocus
+            />
+
+            {/* Color */}
+            <div>
+              <div className="mb-1 text-[11px] text-[#787b86]">Color</div>
+              <div className="flex flex-wrap gap-1.5">
+                {PRICE_LINE_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setEditColor(c)}
+                    title={c}
+                    className="h-5 w-5 rounded-full"
+                    style={{
+                      background: c,
+                      outline:
+                        editColor === c
+                          ? `2px solid #fff`
+                          : "1px solid rgba(255,255,255,0.2)",
+                      outlineOffset: 1,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Grosor */}
+            <div>
+              <div className="mb-1 text-[11px] text-[#787b86]">Grosor</div>
+              <div className="flex gap-1.5">
+                {PRICE_LINE_WIDTHS.map((w) => (
+                  <button
+                    key={w}
+                    onClick={() => setEditWidth(w)}
+                    title={`${w}px`}
+                    className="flex h-6 w-6 items-center justify-center rounded"
+                    style={{
+                      background: editWidth === w ? "#2a2e39" : "transparent",
+                      border: "1px solid #2a2e39",
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: "block",
+                        width: 16,
+                        height: Math.min(w, 3),
+                        background: editColor,
+                        borderRadius: 1,
+                      }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setEditingLine(null)}
+                className="rounded-md px-3 py-1.5 text-xs"
+                style={{ background: "#2a2e39", color: "#d1d4dc" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  const v = parseFloat(editValue);
+                  if (isFinite(v) && editingLine) {
+                    updatePriceLine(editingLine.id, {
+                      price: v,
+                      color: editColor,
+                      lineWidth: editWidth,
+                    });
+                    setEditingLine(null);
+                  }
+                }}
+                className="rounded-md px-3 py-1.5 text-xs"
+                style={{ background: "#2962ff", color: "#fff" }}
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

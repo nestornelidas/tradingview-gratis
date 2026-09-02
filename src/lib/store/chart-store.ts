@@ -22,7 +22,23 @@ export interface PriceLine {
   id: string;
   symbol: string;
   price: number;
+  color: string;
+  lineWidth: number;
 }
+
+export const DEFAULT_PRICE_LINE_COLOR = "#2962ff";
+export const DEFAULT_PRICE_LINE_WIDTH = 1;
+
+export interface MeasurePoint {
+  time: number;
+  price: number;
+}
+export interface MeasureState {
+  phase: "idle" | "placing" | "done";
+  a: MeasurePoint | null;
+  b: MeasurePoint | null;
+}
+export const INITIAL_MEASURE: MeasureState = { phase: "idle", a: null, b: null };
 
 export interface IndicatorConfig {
   ema20: number;
@@ -97,8 +113,10 @@ interface ChartState {
   magnetStrength: MagnetStrength;
   priceLines: PriceLine[];
   symbolDialogOpen: boolean;
-  /** Which indicator's settings dialog is open (null = closed) */
+  /** Indicator settings dialog open (null = closed) */
   settingsTarget: IndicatorKey | null;
+  /** Drawn measurements (measure tool), keyed by symbol. Persisted per chart. */
+  measureBySymbol: Record<string, MeasureState>;
 
   // Actions
   setSymbol: (s: string) => void;
@@ -111,8 +129,20 @@ interface ChartState {
   removeFromWatchlist: (s: string) => void;
   setTool: (t: DrawingTool) => void;
   setMagnetStrength: (s: MagnetStrength) => void;
-  addPriceLine: (price: number, symbol: string) => void;
+  addPriceLine: (
+    price: number,
+    symbol: string,
+    color?: string,
+    lineWidth?: number,
+  ) => void;
+  updatePriceLine: (
+    id: string,
+    patch: Partial<Pick<PriceLine, "price" | "color" | "lineWidth">>,
+  ) => void;
+  removePriceLine: (id: string) => void;
   clearPriceLines: (symbol?: string) => void;
+  setMeasureForSymbol: (symbol: string, measure: MeasureState) => void;
+  clearMeasureForSymbol: (symbol: string) => void;
   setSymbolDialogOpen: (v: boolean) => void;
   setSettingsTarget: (k: IndicatorKey | null) => void;
 }
@@ -149,6 +179,7 @@ export const useChartStore = create<ChartState>()(
       tool: "cursor",
       magnetStrength: "weak" as MagnetStrength,
       priceLines: [],
+      measureBySymbol: {},
       symbolDialogOpen: false,
       settingsTarget: null,
 
@@ -183,7 +214,7 @@ export const useChartStore = create<ChartState>()(
         })),
       setTool: (tool) => set({ tool }),
       setMagnetStrength: (magnetStrength) => set({ magnetStrength }),
-      addPriceLine: (price, symbol) =>
+      addPriceLine: (price, symbol, color, lineWidth) =>
         set((state) => ({
           priceLines: [
             ...state.priceLines,
@@ -194,8 +225,20 @@ export const useChartStore = create<ChartState>()(
                   : `${Date.now()}-${Math.random()}`,
               symbol,
               price,
+              color: color ?? DEFAULT_PRICE_LINE_COLOR,
+              lineWidth: lineWidth ?? DEFAULT_PRICE_LINE_WIDTH,
             },
           ],
+        })),
+      updatePriceLine: (id, patch) =>
+        set((state) => ({
+          priceLines: state.priceLines.map((p) =>
+            p.id === id ? { ...p, ...patch } : p,
+          ),
+        })),
+      removePriceLine: (id) =>
+        set((state) => ({
+          priceLines: state.priceLines.filter((p) => p.id !== id),
         })),
       clearPriceLines: (symbol) =>
         set((state) => ({
@@ -203,6 +246,16 @@ export const useChartStore = create<ChartState>()(
             ? state.priceLines.filter((p) => p.symbol !== symbol)
             : [],
         })),
+      setMeasureForSymbol: (symbol, measure) =>
+        set((state) => ({
+          measureBySymbol: { ...state.measureBySymbol, [symbol]: measure },
+        })),
+      clearMeasureForSymbol: (symbol) =>
+        set((state) => {
+          const measureBySymbol = { ...state.measureBySymbol };
+          delete measureBySymbol[symbol];
+          return { measureBySymbol };
+        }),
       setSymbolDialogOpen: (symbolDialogOpen) => set({ symbolDialogOpen }),
       setSettingsTarget: (settingsTarget) => set({ settingsTarget }),
     }),
@@ -215,6 +268,8 @@ export const useChartStore = create<ChartState>()(
         hidden: s.hidden,
         config: s.config,
         watchlist: s.watchlist,
+        priceLines: s.priceLines,
+        measureBySymbol: s.measureBySymbol,
       }),
     },
   ),
